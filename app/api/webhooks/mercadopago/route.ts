@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import MercadoPago from "mercadopago";
+import { MercadoPagoConfig, Payment as MpPayment } from "mercadopago";
 
 // MP sends GET to verify the endpoint on setup
 export async function GET() {
@@ -41,11 +41,11 @@ export async function POST(req: NextRequest) {
 
       for (const tenant of tenants) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const mp = new MercadoPago({ accessToken: tenant.mpAccessToken! }) as any;
-          const mpPayment = await mp.payment.get({ id: Number(mpPaymentId) });
+          const mpClient = new MercadoPagoConfig({ accessToken: tenant.mpAccessToken! });
+          const mpPaymentApi = new MpPayment(mpClient);
+          const mpPayment = await mpPaymentApi.get({ id: Number(mpPaymentId) });
 
-          const externalRef = mpPayment.external_reference;
+          const externalRef = (mpPayment as { external_reference?: string }).external_reference;
           if (!externalRef) continue;
 
           // external_reference is our Payment.id
@@ -84,9 +84,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "no_token" });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mp = new MercadoPago({ accessToken: tenantRecord.mpAccessToken }) as any;
-    const mpPayment = await mp.payment.get({ id: Number(mpPaymentId) });
+    const mpClient2 = new MercadoPagoConfig({ accessToken: tenantRecord.mpAccessToken });
+    const mpPaymentApi2 = new MpPayment(mpClient2);
+    const mpPayment = await mpPaymentApi2.get({ id: Number(mpPaymentId) });
     const mpStatus = mpPayment.status;
 
     // Map MP status to our PaymentStatus

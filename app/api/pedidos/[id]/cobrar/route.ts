@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import MercadoPago from "mercadopago";
+import { MercadoPagoConfig, Preference } from "mercadopago";
 
 export async function POST(
   req: NextRequest,
@@ -84,8 +84,8 @@ export async function POST(
     return NextResponse.json({ paymentId: payment.id, checkoutUrl: null });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mp = new MercadoPago({ accessToken: tenant.mpAccessToken }) as any;
+  const mpClient = new MercadoPagoConfig({ accessToken: tenant.mpAccessToken });
+  const preferenceApi = new Preference(mpClient);
   const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
   const itemTitle =
@@ -94,7 +94,7 @@ export async function POST(
       : `Pedido #${order.id.slice(-6).toUpperCase()} — ${tenant.name}`;
 
   try {
-    const preference = await mp.preferences.create({
+    const preference = await preferenceApi.create({
       body: {
         items: [
           {
