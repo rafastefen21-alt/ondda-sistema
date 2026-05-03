@@ -258,9 +258,6 @@ export function IntegracoesForm({ initial }: Props) {
                   {showNfeToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-400">
-                Disponível em: Painel Focus NF-e &rarr; Configurações &rarr; Token de acesso.
-              </p>
             </div>
 
             <div className="space-y-1.5">
