@@ -556,7 +556,7 @@ export default async function RootPage() {
             <h2 className="text-2xl font-bold text-slate-900">Fale com a gente</h2>
             <p className="mt-3 text-slate-500">Dúvidas ou demonstração personalizada</p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer"
+              <a href="https://wa.me/5511945172652" target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-6 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
                 <MessageCircle className="h-4 w-4 text-green-500" /> WhatsApp
               </a>
