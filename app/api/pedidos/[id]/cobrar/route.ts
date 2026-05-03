@@ -98,17 +98,14 @@ export async function POST(
       body: {
         items: [
           {
-            id: payment.id,
+            id: payment.id.slice(-30),
             title: itemTitle,
             quantity: 1,
             unit_price: total,
             currency_id: "BRL",
           },
         ],
-        payer: {
-          name: order.client?.name ?? undefined,
-          email: order.client?.email ?? undefined,
-        },
+        // Omit payer to avoid "payer is the seller" error on test accounts
         external_reference: payment.id,
         notification_url: `${baseUrl}/api/webhooks/mercadopago`,
         back_urls: {
@@ -130,9 +127,11 @@ export async function POST(
       paymentId: payment.id,
       checkoutUrl: preference.sandbox_init_point ?? preference.init_point,
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    const mpErr = err as { message?: string; cause?: { error?: string; message?: string } };
+    const detail = mpErr?.cause?.message ?? mpErr?.cause?.error ?? mpErr?.message ?? "Erro desconhecido";
     console.error("[cobrar] MP error:", err);
-    // Payment created but MP link failed — client can retry MP link
-    return NextResponse.json({ paymentId: payment.id, checkoutUrl: null });
+    // Payment already created — return paymentId so client can retry
+    return NextResponse.json({ paymentId: payment.id, checkoutUrl: null, mpError: detail });
   }
 }

@@ -67,17 +67,14 @@ export async function POST(
       body: {
         items: [
           {
-            id: payment.id,
+            id: payment.id.slice(-30), // MP has a 256-char limit, be safe
             title: itemTitle,
             quantity: 1,
             unit_price: amount,
             currency_id: "BRL",
           },
         ],
-        payer: {
-          name: payment.order.client?.name ?? undefined,
-          email: payment.order.client?.email ?? undefined,
-        },
+        // Omit payer to avoid "payer is the seller" MP error in test accounts
         external_reference: payment.id,
         notification_url: `${baseUrl}/api/webhooks/mercadopago`,
         back_urls: {
@@ -100,10 +97,17 @@ export async function POST(
       checkoutUrl: preference.sandbox_init_point ?? preference.init_point,
       preferenceId: preference.id,
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    // Expose the actual MP error for diagnosis
+    const mpErr = err as { message?: string; cause?: { error?: string; message?: string; status?: number } };
+    const detail =
+      mpErr?.cause?.message ??
+      mpErr?.cause?.error ??
+      mpErr?.message ??
+      "Erro desconhecido";
     console.error("[MP] Error creating preference:", err);
     return NextResponse.json(
-      { error: "Erro ao criar link de pagamento no Mercado Pago." },
+      { error: `Mercado Pago: ${detail}` },
       { status: 500 }
     );
   }
