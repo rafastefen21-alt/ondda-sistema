@@ -26,6 +26,7 @@ import {
   formatDateTime,
   ORDER_STATUS_LABELS,
   ORDER_STATUS_COLORS,
+  PAYMENT_METHOD_LABELS,
 } from "@/lib/utils";
 import type { OrderStatus, InvoiceStatus } from "@/app/generated/prisma/client";
 import Link from "next/link";
@@ -64,6 +65,7 @@ interface Order {
   status: OrderStatus;
   notes: string | null;
   internalNotes: string | null;
+  paymentMethod: string | null;
   createdAt: Date;
   approvedAt: Date | null;
   scheduledDeliveryDate: Date | null;
@@ -169,6 +171,35 @@ export function OrderDetailClient({
 
   const canUseMp  = ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(role);
   const canUseNfe = ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(role);
+
+  const [chargeMethod, setChargeMethod] = useState(
+    order.paymentMethod ?? "PIX"
+  );
+  const [generatingCharge, setGeneratingCharge] = useState(false);
+
+  async function generateCharge() {
+    setGeneratingCharge(true);
+    try {
+      const res = await fetch(`/api/pedidos/${order.id}/cobrar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: chargeMethod }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Erro ao gerar cobrança.");
+        return;
+      }
+      router.refresh();
+      if (data.checkoutUrl) {
+        window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      alert("Erro de conexão ao gerar cobrança.");
+    } finally {
+      setGeneratingCharge(false);
+    }
+  }
 
   const [emittingNfe, setEmittingNfe] = useState(false);
   const [nfeError,    setNfeError]    = useState<{ message: string; missing?: string[] } | null>(null);
@@ -435,8 +466,8 @@ export function OrderDetailClient({
             </Card>
           )}
 
-          {/* Payments (internal only) */}
-          {showPrice && order.payments.length > 0 && (
+          {/* Payments */}
+          {showPrice && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -444,59 +475,105 @@ export function OrderDetailClient({
                   Pagamentos
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-gray-100">
-                  {order.payments.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between px-6 py-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {p.installments > 1
-                            ? `Parcela ${p.installmentN}/${p.installments}`
-                            : "Pagamento único"}{" "}
-                          — {p.method.replace(/_/g, " ")}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Vence: {formatDateTime(p.dueDate)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">{formatCurrency(p.amount)}</p>
-                          <span
-                            className={`text-xs font-medium ${
-                              p.status === "PAGO"
-                                ? "text-green-600"
-                                : p.status === "VENCIDO"
-                                ? "text-red-600"
-                                : "text-yellow-600"
-                            }`}
-                          >
-                            {p.status}
-                          </span>
+
+              {order.payments.length > 0 ? (
+                <CardContent className="p-0">
+                  <div className="divide-y divide-gray-100">
+                    {order.payments.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between px-6 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {p.installments > 1
+                              ? `Parcela ${p.installmentN}/${p.installments}`
+                              : "Pagamento único"}{" "}
+                            — {PAYMENT_METHOD_LABELS[p.method] ?? p.method.replace(/_/g, " ")}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Vence: {formatDateTime(p.dueDate)}
+                          </p>
                         </div>
-                        {canUseMp && p.status !== "PAGO" && (
-                          <button
-                            onClick={() => generateMpLink(p.id)}
-                            disabled={mpLoading[p.id]}
-                            title="Gerar link de pagamento no Mercado Pago"
-                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-                          >
-                            {mpLoading[p.id] ? (
-                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                            ) : (
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            )}
-                            {mpLoading[p.id] ? "Gerando..." : "Pagar com MP"}
-                          </button>
-                        )}
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="font-semibold">{formatCurrency(p.amount)}</p>
+                            <span
+                              className={`text-xs font-medium ${
+                                p.status === "PAGO"
+                                  ? "text-green-600"
+                                  : p.status === "VENCIDO"
+                                  ? "text-red-600"
+                                  : "text-yellow-600"
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          </div>
+                          {canUseMp && p.status !== "PAGO" && (
+                            <button
+                              onClick={() => generateMpLink(p.id)}
+                              disabled={mpLoading[p.id]}
+                              title="Gerar link de pagamento no Mercado Pago"
+                              className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              {mpLoading[p.id] ? (
+                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                              ) : (
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              )}
+                              {mpLoading[p.id] ? "Gerando..." : "Pagar com MP"}
+                            </button>
+                          )}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </CardContent>
+              ) : (
+                /* No payments yet — show charge generation */
+                <CardContent>
+                  {canUseMp && !["CANCELADO", "RASCUNHO"].includes(order.status) ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-500">
+                        Nenhuma cobrança registrada. Gere o link de pagamento para o cliente.
+                      </p>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-gray-600">
+                          Forma de pagamento
+                        </label>
+                        <select
+                          value={chargeMethod}
+                          onChange={(e) => setChargeMethod(e.target.value)}
+                          className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-1"
+                        >
+                          {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={generateCharge}
+                        disabled={generatingCharge}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-800 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:opacity-50"
+                      >
+                        {generatingCharge ? (
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        ) : (
+                          <ExternalLink className="h-4 w-4" />
+                        )}
+                        {generatingCharge ? "Gerando cobrança..." : "Cobrar via Mercado Pago"}
+                      </button>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">
+                      Nenhum pagamento registrado.
+                    </p>
+                  )}
+                </CardContent>
+              )}
             </Card>
           )}
         </div>
