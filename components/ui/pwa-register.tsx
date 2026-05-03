@@ -22,8 +22,9 @@ export function PwaRegister() {
     const handler = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e as BeforeInstallPromptEvent);
-      // Só mostra banner se não instalado ainda
-      if (!window.matchMedia("(display-mode: standalone)").matches) {
+      // Só mostra se não instalado e usuário não dispensou antes
+      const dismissed = localStorage.getItem("pwa_banner_dismissed");
+      if (!dismissed && !window.matchMedia("(display-mode: standalone)").matches) {
         setTimeout(() => setShowBanner(true), 3000);
       }
     };
@@ -35,7 +36,10 @@ export function PwaRegister() {
     if (!installPrompt) return;
     await installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
-    if (outcome === "accepted") setShowBanner(false);
+    if (outcome === "accepted") {
+      localStorage.setItem("pwa_banner_dismissed", "1");
+      setShowBanner(false);
+    }
   }
 
   if (!showBanner) return null;
@@ -50,7 +54,10 @@ export function PwaRegister() {
           <p className="text-xs text-gray-500">Acesse pedidos e catálogo offline</p>
         </div>
         <button
-          onClick={() => setShowBanner(false)}
+          onClick={() => {
+            localStorage.setItem("pwa_banner_dismissed", "1");
+            setShowBanner(false);
+          }}
           className="text-gray-400 hover:text-gray-600"
         >
           <X className="h-4 w-4" />
