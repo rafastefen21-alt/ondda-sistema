@@ -1,0 +1,345 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  GERENTE
+  OPERADOR
+  CLIENTE
+}
+
+enum Plan {
+  FREE
+  BASIC
+  PRO
+}
+
+enum OrderStatus {
+  RASCUNHO
+  PENDENTE_APROVACAO
+  APROVADO
+  EM_PRODUCAO
+  PRONTO
+  EM_ENTREGA
+  ENTREGUE
+  CANCELADO
+}
+
+enum PaymentMethod {
+  PIX
+  BOLETO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  DINHEIRO
+  TRANSFERENCIA
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  VENCIDO
+  CANCELADO
+}
+
+enum InvoiceStatus {
+  PROCESSANDO
+  EMITIDA
+  CANCELADA
+  ERRO
+}
+
+// ============================================================
+// MULTI-TENANCY
+// ============================================================
+
+model Tenant {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  cnpj           String?  @unique
+  email          String?
+  phone          String?
+  address        String?
+  city           String?
+  state          String?
+  plan           Plan     @default(FREE)
+  active         Boolean  @default(true)
+  focusNfeToken  String?
+  nfeAmbiente    String?  @default("homologacao")
+  mpPublicKey    String?
+  mpAccessToken  String?
+
+  // Dados fiscais para emissão de NF-e
+  ie               String?  // Inscrição Estadual
+  cnae             String?  // Código CNAE (7 dígitos)
+  regimeTributario String?  // "1" Simples Nacional | "2" Simples Excesso | "3" Regime Normal
+  cep              String?
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  codigoCidade     String?  // Código IBGE do município (7 dígitos)
+
+  // Personalização da loja pública
+  lojaCorPrimaria  String?  @default("#f59e0b")
+  lojaBannerUrl    String?
+  lojaLogoUrl      String?
+  lojaDescricao    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users     User[]
+  products  Product[]
+  categories ProductCategory[]
+  orders    Order[]
+  payments  Payment[]
+  invoices  Invoice[]
+  costs     OperationalCost[]
+
+  @@index([slug])
+}
+
+// ============================================================
+// USERS & AUTH (NextAuth.js v5)
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          Role      @default(CLIENTE)
+  active        Boolean   @default(true)
+  cnpj          String?
+  cpf           String?
+  // Endereço fiscal (para NF-e como destinatário)
+  cep           String?
+  logradouro    String?
+  numero        String?
+  complemento   String?
+  bairro        String?
+  city          String?
+  state         String?
+  codigoCidade  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  orders         Order[]  @relation("OrderClient")
+  approvedOrders Order[]  @relation("OrderApprover")
+
+  @@index([tenantId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+model ProductCategory {
+  id       String    @id @default(cuid())
+  tenantId String
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String
+  products Product[]
+
+  @@index([tenantId])
+}
+
+model Product {
+  id          String           @id @default(cuid())
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  category    ProductCategory? @relation(fields: [categoryId], references: [id])
+  name        String
+  description String?
+  price       Decimal          @db.Decimal(10, 2)
+  unit        String           @default("un")
+  minQuantity    Decimal?         @db.Decimal(10, 3)
+  shelfLifeDays  Int?
+  ncm            String?          // Código NCM para NF-e (8 dígitos)
+  cfop           String?          @default("5102") // CFOP padrão — 5102 interno, 6102 interestadual
+  active         Boolean          @default(true)
+  imageUrl       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([tenantId])
+}
+
+// ============================================================
+// ORDERS
+// ============================================================
+
+model Order {
+  id              String      @id @default(cuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          User        @relation("OrderClient", fields: [clientId], references: [id])
+  status          OrderStatus @default(RASCUNHO)
+  requestedDate          DateTime?
+  scheduledDeliveryDate  DateTime?
+  deliveryAddress String?
+  notes           String?
+  internalNotes   String?
+  paymentMethod   PaymentMethod?
+  approvedAt      DateTime?
+  approvedById    String?
+  approvedBy      User?       @relation("OrderApprover", fields: [approvedById], references: [id])
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items    OrderItem[]
+  payments Payment[]
+  invoices Invoice[]
+
+  @@index([tenantId])
+  @@index([clientId])
+  @@index([status])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Decimal @db.Decimal(10, 3)
+  unitPrice Decimal @db.Decimal(10, 2)
+  notes     String?
+
+  @@index([orderId])
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+model Payment {
+  id           String        @id @default(cuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId      String
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount       Decimal       @db.Decimal(10, 2)
+  method       PaymentMethod
+  installments Int           @default(1)
+  installmentN Int           @default(1)
+  dueDate      DateTime
+  paidAt       DateTime?
+  mpPaymentId  String?
+  mpStatus     String?
+  status       PaymentStatus @default(PENDENTE)
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ============================================================
+// INVOICES (NF-e)
+// ============================================================
+
+model Invoice {
+  id          String        @id @default(cuid())
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId     String
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  number      String?
+  series      String?       @default("1")
+  focusNfeRef String?
+  accessKey   String?
+  issuedAt    DateTime?
+  xmlUrl      String?
+  pdfUrl      String?
+  status      InvoiceStatus @default(PROCESSANDO)
+  errorMsg    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tenantId])
+  @@index([orderId])
+}
+
+// ============================================================
+// ERP - OPERATIONAL COSTS
+// ============================================================
+
+model OperationalCost {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  category    String
+  date        DateTime
+  recurring   Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([date])
+}

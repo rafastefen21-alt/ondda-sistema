@@ -1,36 +1,152 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DistribSaaS — Sistema de Gestão para Distribuidoras
 
-## Getting Started
+SaaS multi-tenant para distribuidoras de alimentos. Construído com Next.js 16, Prisma 7, PostgreSQL (Supabase) e NextAuth v5.
 
-First, run the development server:
+---
+
+## Pré-requisitos
+
+- Node.js 20+
+- Conta no [Supabase](https://supabase.com) (gratuita)
+
+---
+
+## 1. Configurar o banco de dados (Supabase)
+
+1. Acesse [supabase.com](https://supabase.com) e crie um novo projeto
+2. Vá em **Project Settings → Database → Connection string → URI**
+3. Copie a string de conexão (formato `postgresql://postgres:[senha]@[host]:5432/postgres`)
+
+---
+
+## 2. Configurar variáveis de ambiente
+
+Renomeie o arquivo `.env.example` para `.env` (ou edite o `.env` existente):
+
+```bash
+# Banco de dados (cole a URI do Supabase aqui)
+DATABASE_URL="postgresql://postgres:[senha]@[host]:5432/postgres"
+
+# Chave secreta para NextAuth (gere com: openssl rand -base64 32)
+AUTH_SECRET="sua-chave-secreta-aqui"
+
+# URL da aplicação
+NEXTAUTH_URL="http://localhost:3000"
+
+# Mercado Pago (opcional por enquanto)
+MP_ACCESS_TOKEN=""
+MP_PUBLIC_KEY=""
+
+# Focus NFe (opcional por enquanto)
+FOCUS_NFE_TOKEN=""
+FOCUS_NFE_BASE_URL="https://homologacao.focusnfe.com.br"
+
+# Resend para emails (opcional por enquanto)
+RESEND_API_KEY=""
+```
+
+Para gerar `AUTH_SECRET` no Windows (PowerShell):
+```powershell
+[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+---
+
+## 3. Instalar dependências
+
+```bash
+cd sistema
+npm install
+```
+
+---
+
+## 4. Criar as tabelas no banco
+
+```bash
+npx prisma migrate dev --name init
+```
+
+Isso cria todas as tabelas no Supabase.
+
+---
+
+## 5. Popular com dados de teste
+
+```bash
+npm run db:seed
+```
+
+Cria 1 empresa, 5 usuários e dados de exemplo.
+
+---
+
+## 6. Iniciar a aplicação
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Credenciais de acesso (dados de teste)
 
-## Learn More
+| Perfil | Email | Senha |
+|---|---|---|
+| Administrador | admin@casadopao.com.br | senha123 |
+| Gerente | gerente@casadopao.com.br | senha123 |
+| Operador | operador@casadopao.com.br | senha123 |
+| Cliente 1 | padaria.esperanca@gmail.com | senha123 |
+| Cliente 2 | mercadinho.bom@gmail.com | senha123 |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Módulos disponíveis
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Módulo | Rota | Quem acessa |
+|---|---|---|
+| Dashboard | `/dashboard` | Todos |
+| Catálogo / Novo pedido | `/catalogo` | Clientes |
+| Meus pedidos | `/pedidos` | Todos |
+| Aprovações | `/aprovacoes` | Admin, Gerente |
+| Produção semanal | `/producao` | Admin, Gerente, Operador |
+| Financeiro | `/financeiro` | Admin, Gerente |
+| Produtos | `/produtos` | Admin, Gerente (gestão), Operador (leitura) |
+| Clientes | `/clientes` | Admin, Gerente |
+| Notas Fiscais | `/notas` | Admin, Gerente |
+| Configurações | `/configuracoes` | Admin |
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Fluxo de pedido
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+RASCUNHO → PENDENTE_APROVACAO → APROVADO → EM_PRODUCAO → PRONTO → EM_ENTREGA → ENTREGUE
+```
+
+**Regra de preço:** o cliente só vê os preços depois que o pedido é **Aprovado**.
+
+---
+
+## Deploy em produção (Vercel + Supabase)
+
+1. Faça push do projeto para o GitHub
+2. Importe no [Vercel](https://vercel.com)
+3. Configure as variáveis de ambiente no painel da Vercel
+4. Altere `NEXTAUTH_URL` para o domínio da Vercel
+5. Execute `npx prisma migrate deploy` via Vercel build command ou manualmente
+
+---
+
+## Scripts disponíveis
+
+```bash
+npm run dev          # Servidor de desenvolvimento
+npm run build        # Build de produção
+npm run start        # Servidor de produção
+npm run db:seed      # Popular banco com dados de teste
+npx prisma studio    # Interface visual do banco de dados
+npx prisma migrate dev --name <nome>  # Nova migration
+```

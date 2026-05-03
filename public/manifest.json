@@ -1,0 +1,39 @@
+{
+  "name": "Ondda — Acompanhe seus pedidos",
+  "short_name": "Ondda",
+  "description": "Faça pedidos e acompanhe entregas em tempo real.",
+  "start_url": "/catalogo",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e40af",
+  "orientation": "portrait-primary",
+  "categories": ["business", "shopping"],
+  "icons": [
+    {
+      "src": "/ondda-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/ondda-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Meus Pedidos",
+      "url": "/pedidos",
+      "description": "Ver meus pedidos"
+    },
+    {
+      "name": "Novo Pedido",
+      "url": "/catalogo",
+      "description": "Fazer um novo pedido"
+    }
+  ]
+}
