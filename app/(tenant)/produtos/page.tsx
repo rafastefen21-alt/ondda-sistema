@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { CategoriasManager } from "./categorias-manager";
+import { ProdutosBulkClient } from "./produtos-bulk-client";
 
 export default async function ProdutosPage() {
   const session = await auth();
@@ -47,12 +48,15 @@ export default async function ProdutosPage() {
           <p className="text-gray-500">{products.length} produto(s) cadastrado(s)</p>
         </div>
         {canManage && (
-          <Link href="/produtos/novo">
-            <Button>
-              <Plus className="h-4 w-4" />
-              Novo Produto
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <ProdutosBulkClient />
+            <Link href="/produtos/novo">
+              <Button>
+                <Plus className="h-4 w-4" />
+                Novo Produto
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 

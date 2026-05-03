@@ -1,0 +1,366 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Upload, Download, X, CheckCircle, AlertCircle, FileDown, FileUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+interface ParsedRow {
+  nome: string;
+  descricao?: string;
+  preco: number;
+  unidade: string;
+  categoria?: string;
+  qtd_minima?: number;
+  validade_dias?: number;
+  ncm?: string;
+  cfop?: string;
+  ativo: boolean;
+  _error?: string;
+}
+
+const TEMPLATE_HEADERS = ["nome", "descricao", "preco", "unidade", "categoria", "qtd_minima", "validade_dias", "ncm", "cfop", "ativo"];
+const TEMPLATE_EXAMPLE = ["Pão Francês", "Pão francês tradicional", "0.85", "un", "Pães", "1", "", "", "5102", "sim"];
+
+function parseCsv(text: string): ParsedRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+
+  // Detect separator (comma or semicolon)
+  const sep = lines[0].includes(";") ? ";" : ",";
+
+  const splitLine = (line: string): string[] => {
+    const result: string[] = [];
+    let cur = "";
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuote = !inQuote;
+      } else if (ch === sep && !inQuote) {
+        result.push(cur.trim());
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const rawHeaders = splitLine(lines[0]).map((h) => h.toLowerCase().trim());
+
+  const get = (row: string[], key: string) => {
+    const idx = rawHeaders.indexOf(key);
+    return idx >= 0 ? (row[idx] ?? "").trim() : "";
+  };
+
+  return lines.slice(1).map((line, i) => {
+    const cols = splitLine(line);
+    const nome = get(cols, "nome");
+    const precoRaw = get(cols, "preco").replace(",", ".");
+    const preco = parseFloat(precoRaw);
+    const ativoRaw = get(cols, "ativo").toLowerCase();
+
+    const row: ParsedRow = {
+      nome,
+      descricao:     get(cols, "descricao") || undefined,
+      preco:         isNaN(preco) ? 0 : preco,
+      unidade:       get(cols, "unidade") || "un",
+      categoria:     get(cols, "categoria") || undefined,
+      qtd_minima:    get(cols, "qtd_minima") ? parseFloat(get(cols, "qtd_minima").replace(",", ".")) : undefined,
+      validade_dias: get(cols, "validade_dias") ? parseInt(get(cols, "validade_dias")) : undefined,
+      ncm:           get(cols, "ncm") || undefined,
+      cfop:          get(cols, "cfop") || undefined,
+      ativo:         ativoRaw !== "nao" && ativoRaw !== "não" && ativoRaw !== "false" && ativoRaw !== "0",
+    };
+
+    if (!row.nome) row._error = `Linha ${i + 2}: nome obrigatório`;
+    if (isNaN(preco) || preco <= 0) row._error = `Linha ${i + 2}: preço inválido ("${precoRaw}")`;
+
+    return row;
+  });
+}
+
+function downloadTemplate() {
+  const csv = [TEMPLATE_HEADERS.join(","), TEMPLATE_EXAMPLE.join(",")].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "modelo_produtos.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function ProdutosBulkClient() {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ created: number; errors: string[] } | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setRows(parseCsv(text));
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  async function handleImport() {
+    const validRows = rows.filter((r) => !r._error);
+    if (!validRows.length) return;
+    setImporting(true);
+    try {
+      const res = await fetch("/api/produtos/importar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validRows),
+      });
+      const data = await res.json();
+      setResult(data);
+      if (data.created > 0) router.refresh();
+    } catch {
+      setResult({ created: 0, errors: ["Erro de conexão."] });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/produtos/exportar");
+      if (!res.ok) { alert("Erro ao exportar."); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "produtos.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function reset() {
+    setRows([]);
+    setFileName("");
+    setResult(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  const validRows  = rows.filter((r) => !r._error);
+  const errorRows  = rows.filter((r) => r._error);
+
+  return (
+    <>
+      {/* Toolbar buttons */}
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+          <FileDown className="h-4 w-4" />
+          {exporting ? "Exportando..." : "Exportar CSV"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => { reset(); setOpen(true); }}>
+          <FileUp className="h-4 w-4" />
+          Importar CSV
+        </Button>
+      </div>
+
+      {/* Modal */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Importar produtos em lote</h2>
+                <p className="text-sm text-gray-400">Envie um arquivo CSV com os produtos</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Step 1 — Download template */}
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <Download className="h-5 w-5 shrink-0 text-blue-700" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-blue-900">Baixar modelo CSV</p>
+                <p className="text-xs text-blue-600">
+                  Colunas: {TEMPLATE_HEADERS.join(", ")}
+                </p>
+              </div>
+              <button
+                onClick={downloadTemplate}
+                className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+              >
+                Baixar modelo
+              </button>
+            </div>
+
+            {/* Step 2 — Upload */}
+            <label
+              htmlFor="csv-upload"
+              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 py-8 transition hover:border-blue-400 hover:bg-blue-50"
+            >
+              <Upload className="h-8 w-8 text-gray-300" />
+              <p className="text-sm font-medium text-gray-600">
+                {fileName ? fileName : "Clique para selecionar o CSV"}
+              </p>
+              <p className="text-xs text-gray-400">Formatos aceitos: .csv — separado por vírgula ou ponto e vírgula</p>
+              <input
+                ref={fileRef}
+                id="csv-upload"
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleFile}
+              />
+            </label>
+
+            {/* Preview */}
+            {rows.length > 0 && !result && (
+              <div className="mt-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                    {validRows.length} válido{validRows.length !== 1 ? "s" : ""}
+                  </span>
+                  {errorRows.length > 0 && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600">
+                      {errorRows.length} com erro
+                    </span>
+                  )}
+                </div>
+
+                {/* Preview table (first 5) */}
+                <div className="overflow-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-left text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Nome</th>
+                        <th className="px-3 py-2 font-medium">Preço</th>
+                        <th className="px-3 py-2 font-medium">Unidade</th>
+                        <th className="px-3 py-2 font-medium">Categoria</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {rows.slice(0, 6).map((row, i) => (
+                        <tr key={i} className={row._error ? "bg-red-50" : ""}>
+                          <td className="px-3 py-2 font-medium text-gray-900">{row.nome || <span className="text-red-400 italic">vazio</span>}</td>
+                          <td className="px-3 py-2">
+                            {row.preco > 0 ? `R$ ${row.preco.toFixed(2)}` : <span className="text-red-400">inválido</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500">{row.unidade}</td>
+                          <td className="px-3 py-2 text-gray-500">{row.categoria || "—"}</td>
+                          <td className="px-3 py-2">
+                            {row._error
+                              ? <span className="text-red-500" title={row._error}>⚠ erro</span>
+                              : <span className="text-green-600">✓</span>
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {rows.length > 6 && (
+                    <p className="px-3 py-2 text-xs text-gray-400">
+                      ... e mais {rows.length - 6} linha{rows.length - 6 !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+
+                {/* Errors */}
+                {errorRows.length > 0 && (
+                  <div className="mt-2 rounded-lg bg-red-50 p-3 text-xs text-red-600 space-y-0.5">
+                    {errorRows.slice(0, 5).map((r, i) => (
+                      <p key={i}>• {r._error}</p>
+                    ))}
+                    {errorRows.length > 5 && <p>• ... e mais {errorRows.length - 5} erros</p>}
+                    <p className="mt-1 font-medium">Apenas as linhas válidas serão importadas.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Import result */}
+            {result && (
+              <div className={`mt-4 rounded-xl p-4 ${result.created > 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                <div className="flex items-start gap-2">
+                  {result.created > 0
+                    ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+                    : <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                  }
+                  <div>
+                    <p className={`font-semibold text-sm ${result.created > 0 ? "text-green-800" : "text-red-700"}`}>
+                      {result.created > 0
+                        ? `${result.created} produto${result.created !== 1 ? "s" : ""} importado${result.created !== 1 ? "s" : ""} com sucesso!`
+                        : "Nenhum produto importado."
+                      }
+                    </p>
+                    {result.errors.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 text-xs text-red-600">
+                        {result.errors.slice(0, 5).map((e, i) => <li key={i}>• {e}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer actions */}
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                {result ? "Fechar" : "Cancelar"}
+              </button>
+              {!result && (
+                <Button
+                  onClick={handleImport}
+                  disabled={validRows.length === 0 || importing}
+                >
+                  {importing ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Importando...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Importar {validRows.length > 0 ? `${validRows.length} produto${validRows.length !== 1 ? "s" : ""}` : ""}
+                    </>
+                  )}
+                </Button>
+              )}
+              {result && result.created > 0 && (
+                <Button onClick={() => { reset(); setResult(null); }}>
+                  Importar mais
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
