@@ -17,6 +17,8 @@ import {
   ExternalLink,
   FileText,
   AlertCircle,
+  Copy,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,6 +142,8 @@ export function OrderDetailClient({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [mpLoading, setMpLoading] = useState<Record<string, boolean>>({});
+  const [mpLinks,   setMpLinks]   = useState<Record<string, string>>({});
+  const [copied,    setCopied]    = useState<Record<string, boolean>>({});
   const [editingDate, setEditingDate] = useState(false);
   const [dateValue, setDateValue] = useState(
     order.scheduledDeliveryDate
@@ -192,7 +196,7 @@ export function OrderDetailClient({
       }
       router.refresh();
       if (data.checkoutUrl) {
-        window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+        setMpLinks((prev) => ({ ...prev, [data.paymentId]: data.checkoutUrl }));
       }
     } catch {
       alert("Erro de conexão ao gerar cobrança.");
@@ -215,11 +219,21 @@ export function OrderDetailClient({
         alert(data.error ?? "Erro ao gerar link de pagamento.");
         return;
       }
-      window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+      setMpLinks((prev) => ({ ...prev, [paymentId]: data.checkoutUrl }));
     } catch {
       alert("Erro de conexão ao gerar link.");
     } finally {
       setMpLoading((prev) => ({ ...prev, [paymentId]: false }));
+    }
+  }
+
+  async function copyLink(paymentId: string, url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied((prev) => ({ ...prev, [paymentId]: true }));
+      setTimeout(() => setCopied((prev) => ({ ...prev, [paymentId]: false })), 2500);
+    } catch {
+      prompt("Copie o link abaixo:", url);
     }
   }
 
@@ -480,52 +494,86 @@ export function OrderDetailClient({
                 <CardContent className="p-0">
                   <div className="divide-y divide-gray-100">
                     {order.payments.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between px-6 py-3"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {p.installments > 1
-                              ? `Parcela ${p.installmentN}/${p.installments}`
-                              : "Pagamento único"}{" "}
-                            — {PAYMENT_METHOD_LABELS[p.method] ?? p.method.replace(/_/g, " ")}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            Vence: {formatDateTime(p.dueDate)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="font-semibold">{formatCurrency(p.amount)}</p>
-                            <span
-                              className={`text-xs font-medium ${
-                                p.status === "PAGO"
-                                  ? "text-green-600"
-                                  : p.status === "VENCIDO"
-                                  ? "text-red-600"
-                                  : "text-yellow-600"
-                              }`}
-                            >
-                              {p.status}
-                            </span>
+                      <div key={p.id}>
+                        <div className="flex items-center justify-between px-6 py-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {p.installments > 1
+                                ? `Parcela ${p.installmentN}/${p.installments}`
+                                : "Pagamento único"}{" "}
+                              — {PAYMENT_METHOD_LABELS[p.method] ?? p.method.replace(/_/g, " ")}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              Vence: {formatDateTime(p.dueDate)}
+                            </p>
                           </div>
-                          {canUseMp && p.status !== "PAGO" && (
-                            <button
-                              onClick={() => generateMpLink(p.id)}
-                              disabled={mpLoading[p.id]}
-                              title="Gerar link de pagamento no Mercado Pago"
-                              className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-                            >
-                              {mpLoading[p.id] ? (
-                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                              ) : (
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              )}
-                              {mpLoading[p.id] ? "Gerando..." : "Pagar com MP"}
-                            </button>
-                          )}
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="font-semibold">{formatCurrency(p.amount)}</p>
+                              <span
+                                className={`text-xs font-medium ${
+                                  p.status === "PAGO"
+                                    ? "text-green-600"
+                                    : p.status === "VENCIDO"
+                                    ? "text-red-600"
+                                    : "text-yellow-600"
+                                }`}
+                              >
+                                {p.status}
+                              </span>
+                            </div>
+                            {canUseMp && p.status !== "PAGO" && (
+                              <button
+                                onClick={() => generateMpLink(p.id)}
+                                disabled={mpLoading[p.id]}
+                                title="Gerar link de pagamento no Mercado Pago"
+                                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                              >
+                                {mpLoading[p.id] ? (
+                                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                                ) : (
+                                  <Link2 className="h-3.5 w-3.5" />
+                                )}
+                                {mpLoading[p.id] ? "Gerando..." : "Gerar link MP"}
+                              </button>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Link panel — appears after generating */}
+                        {mpLinks[p.id] && (
+                          <div className="mx-4 mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                            <p className="mb-1.5 text-xs font-semibold text-blue-800">
+                              Link de pagamento gerado
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                readOnly
+                                value={mpLinks[p.id]}
+                                className="flex-1 truncate rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none"
+                              />
+                              <button
+                                onClick={() => copyLink(p.id, mpLinks[p.id])}
+                                className="flex items-center gap-1 rounded-lg bg-blue-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-900"
+                              >
+                                {copied[p.id] ? (
+                                  <><Check className="h-3.5 w-3.5" />Copiado!</>
+                                ) : (
+                                  <><Copy className="h-3.5 w-3.5" />Copiar</>
+                                )}
+                              </button>
+                              <a
+                                href={mpLinks[p.id]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-lg border border-blue-200 bg-white p-1.5 text-blue-700 hover:bg-blue-100"
+                                title="Abrir link"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
