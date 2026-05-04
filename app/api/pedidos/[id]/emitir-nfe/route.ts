@@ -124,7 +124,9 @@ export async function POST(
   }
 
   // ── 5. Monta payload ──────────────────────────────────────────────────────
-  const ref     = `pedido-${order.id}`;
+  // Usa sufixo numérico para permitir re-emissão após cancelamento
+  const emissionNumber = order.invoices.length + 1;
+  const ref     = `nfe-${order.id.slice(-16)}-v${emissionNumber}`;
   const payload = buildNfePayload(nfeOrder, nfeTenant);
 
   // ── 6. Cria registro Invoice como PROCESSANDO ─────────────────────────────

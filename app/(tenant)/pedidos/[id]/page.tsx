@@ -35,8 +35,8 @@ export default async function OrderDetailPage({
         orderBy: { createdAt: "desc" },
         select: {
           id: true, number: true, status: true,
-          pdfUrl: true, issuedAt: true,
-          focusNfeRef: true, errorMsg: true,
+          pdfUrl: true, xmlUrl: true, accessKey: true,
+          issuedAt: true, focusNfeRef: true, errorMsg: true,
         },
       },
     },
