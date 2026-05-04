@@ -141,9 +141,28 @@ export async function POST(
 
   // ── 7. Envia para a Focus NF-e ────────────────────────────────────────────
   const ambiente = tenant.nfeAmbiente ?? "homologacao";
+
+  // Log de diagnóstico (visível em Vercel → Logs)
+  const emitenteData = (payload as { emitente?: { cnpj?: string; inscricao_estadual?: string } }).emitente;
+  console.log("[NFE-EMIT] tentando emitir", {
+    ref,
+    ambiente,
+    tokenPrefix: tenant.focusNfeToken.slice(0, 8) + "…",
+    tokenLength: tenant.focusNfeToken.length,
+    cnpjEmitente: emitenteData?.cnpj,
+    ieEmitente:   emitenteData?.inscricao_estadual,
+    tenantCnpjBruto: tenant.cnpj,
+  });
+
   const { httpStatus, data: focusData } = await submitNfe(
     ref, payload, tenant.focusNfeToken, ambiente,
   );
+
+  console.log("[NFE-EMIT] resposta Focus", {
+    ref,
+    httpStatus,
+    focusData,
+  });
 
   if (httpStatus >= 400) {
     // Salva o erro e devolve detalhes para o frontend
@@ -155,7 +174,16 @@ export async function POST(
       },
     });
     return NextResponse.json(
-      { error: "Erro ao emitir NF-e na Focus NF-e.", details: focusData },
+      {
+        error: "Erro ao emitir NF-e na Focus NF-e.",
+        details: focusData,
+        debug: {
+          ambiente,
+          cnpjEnviado: emitenteData?.cnpj,
+          ieEnviada:   emitenteData?.inscricao_estadual,
+          tokenPrefix: tenant.focusNfeToken.slice(0, 8) + "…",
+        },
+      },
       { status: 502 },
     );
   }

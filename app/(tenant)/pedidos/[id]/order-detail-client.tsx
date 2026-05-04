@@ -211,7 +211,12 @@ export function OrderDetailClient({
   }
 
   const [emittingNfe, setEmittingNfe] = useState(false);
-  const [nfeError,    setNfeError]    = useState<{ message: string; missing?: string[] } | null>(null);
+  const [nfeError,    setNfeError]    = useState<{
+    message: string;
+    missing?: string[];
+    details?: unknown;
+    debug?: { ambiente?: string; cnpjEnviado?: string; ieEnviada?: string; tokenPrefix?: string };
+  } | null>(null);
 
   // Cancelamento de NF-e
   const [cancellingId,   setCancellingId]   = useState<string | null>(null); // invoiceId em cancelamento
@@ -255,7 +260,12 @@ export function OrderDetailClient({
       const res  = await fetch(`/api/pedidos/${order.id}/emitir-nfe`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        setNfeError({ message: data.error ?? "Erro ao emitir NF-e.", missing: data.missing });
+        setNfeError({
+          message: data.error ?? "Erro ao emitir NF-e.",
+          missing: data.missing,
+          details: data.details,
+          debug:   data.debug,
+        });
         return;
       }
       router.refresh();
@@ -914,7 +924,7 @@ export function OrderDetailClient({
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-red-700">{nfeError.message}</p>
                         {nfeError.missing && nfeError.missing.length > 0 && (
                           <ul className="mt-1 space-y-0.5">
@@ -922,6 +932,25 @@ export function OrderDetailClient({
                               <li key={m} className="text-xs text-red-600">• {m}</li>
                             ))}
                           </ul>
+                        )}
+                        {nfeError.debug && (
+                          <div className="mt-2 rounded bg-white/60 p-2 text-xs text-gray-700">
+                            <p className="font-semibold text-gray-600">Diagnóstico:</p>
+                            <p>Ambiente: <span className="font-mono">{nfeError.debug.ambiente}</span></p>
+                            <p>CNPJ enviado: <span className="font-mono">{nfeError.debug.cnpjEnviado}</span></p>
+                            <p>IE enviada: <span className="font-mono">{nfeError.debug.ieEnviada}</span></p>
+                            <p>Token (prefixo): <span className="font-mono">{nfeError.debug.tokenPrefix}</span></p>
+                          </div>
+                        )}
+                        {nfeError.details !== undefined && nfeError.details !== null && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-red-600 hover:underline">
+                              Resposta completa do Focus NF-e
+                            </summary>
+                            <pre className="mt-1 max-h-64 overflow-auto rounded bg-white/60 p-2 text-[10px] leading-snug text-gray-700">
+{JSON.stringify(nfeError.details, null, 2)}
+                            </pre>
+                          </details>
                         )}
                       </div>
                     </div>
