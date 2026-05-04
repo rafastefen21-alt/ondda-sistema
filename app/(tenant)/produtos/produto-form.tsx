@@ -23,6 +23,10 @@ type ProductData = {
   unit?: string;
   minQuantity?: number | string | null;
   shelfLifeDays?: number | null;
+  pricePacote?: number | null;
+  priceCaixa?: number | null;
+  labelPacote?: string | null;
+  labelCaixa?: string | null;
   ncm?: string | null;
   cfop?: string | null;
   imageUrl?: string | null;
@@ -88,6 +92,14 @@ export function ProdutoForm({
       shelfLifeDays: fd.get("shelfLifeDays")
         ? parseInt(fd.get("shelfLifeDays") as string, 10)
         : undefined,
+      pricePacote: fd.get("pricePacote")
+        ? parseFloat(fd.get("pricePacote") as string)
+        : null,
+      labelPacote: (fd.get("labelPacote") as string) || null,
+      priceCaixa: fd.get("priceCaixa")
+        ? parseFloat(fd.get("priceCaixa") as string)
+        : null,
+      labelCaixa: (fd.get("labelCaixa") as string) || null,
       ncm:  (fd.get("ncm")  as string) || undefined,
       cfop: (fd.get("cfop") as string) || undefined,
       imageUrl: imageUrl || undefined,
@@ -209,6 +221,61 @@ export function ProdutoForm({
                   defaultValue={product?.shelfLifeDays ?? ""}
                   placeholder="Ex: 7"
                 />
+              </div>
+            </div>
+
+            {/* Preços por embalagem */}
+            <div className="space-y-3 rounded-md border border-gray-200 p-3">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Preços por embalagem (opcional)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pricePacote">Preço Pacote (R$)</Label>
+                  <Input
+                    id="pricePacote"
+                    name="pricePacote"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    defaultValue={product?.pricePacote ? Number(product.pricePacote).toFixed(2) : ""}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="labelPacote">Rótulo do pacote</Label>
+                  <Input
+                    id="labelPacote"
+                    name="labelPacote"
+                    defaultValue={product?.labelPacote ?? ""}
+                    placeholder="Ex: Pacote c/ 10 un"
+                    maxLength={60}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="priceCaixa">Preço Caixa (R$)</Label>
+                  <Input
+                    id="priceCaixa"
+                    name="priceCaixa"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    defaultValue={product?.priceCaixa ? Number(product.priceCaixa).toFixed(2) : ""}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="labelCaixa">Rótulo da caixa</Label>
+                  <Input
+                    id="labelCaixa"
+                    name="labelCaixa"
+                    defaultValue={product?.labelCaixa ?? ""}
+                    placeholder="Ex: Caixa c/ 24 un"
+                    maxLength={60}
+                  />
+                </div>
               </div>
             </div>
 

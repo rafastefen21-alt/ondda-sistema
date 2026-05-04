@@ -6,6 +6,7 @@ import { z } from "zod";
 const itemSchema = z.object({
   productId: z.string(),
   quantity: z.number().positive(),
+  tier: z.enum(["unidade", "pacote", "caixa"]).optional().default("unidade"),
 });
 
 const novoSchema = z.object({
@@ -118,11 +119,17 @@ export async function POST(
       status: "PENDENTE_APROVACAO",
       notes: notesText,
       items: {
-        create: data.items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: productMap.get(item.productId)!.price,
-        })),
+        create: data.items.map((item) => {
+          const p = productMap.get(item.productId)!;
+          let unitPrice = p.price;
+          if (item.tier === "pacote" && p.pricePacote) unitPrice = p.pricePacote;
+          if (item.tier === "caixa"  && p.priceCaixa)  unitPrice = p.priceCaixa;
+          return {
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice,
+          };
+        }),
       },
     },
   });

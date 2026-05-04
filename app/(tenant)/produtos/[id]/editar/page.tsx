@@ -39,6 +39,12 @@ export default async function EditarProdutoPage({
         unit: product.unit,
         minQuantity: product.minQuantity ? Number(product.minQuantity) : null,
         shelfLifeDays: product.shelfLifeDays ?? null,
+        pricePacote: product.pricePacote ? Number(product.pricePacote) : null,
+        priceCaixa: product.priceCaixa ? Number(product.priceCaixa) : null,
+        labelPacote: product.labelPacote ?? null,
+        labelCaixa: product.labelCaixa ?? null,
+        ncm: product.ncm ?? null,
+        cfop: product.cfop ?? null,
         categoryId: product.categoryId,
         active: product.active,
       }}

@@ -12,23 +12,60 @@ import { Card, CardContent } from "@/components/ui/card";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type Tier = "unidade" | "pacote" | "caixa";
+
 interface Product {
   id: string;
   name: string;
   description: string | null;
+  price: number;
   unit: string;
   minQuantity?: number;
   shelfLifeDays?: number | null;
+  pricePacote: number | null;
+  priceCaixa: number | null;
+  labelPacote: string | null;
+  labelCaixa: string | null;
   categoryId: string | null;
   categoryName: string | null;
   imageUrl?: string | null;
 }
 
 interface Category { id: string; name: string }
-interface CartItem { product: Product; quantity: number }
+
+interface CartItem {
+  product: Product;
+  quantity: number;
+  tier: Tier;
+  unitPrice: number;
+  tierLabel: string;
+}
 
 type CheckoutTab = "novo" | "existente";
 type Step = "catalogo" | "checkout" | "sucesso";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmtPrice(n: number) {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function cartKey(productId: string, tier: Tier) {
+  return `${productId}-${tier}`;
+}
+
+function tiersOf(p: Product): { tier: Tier; price: number; label: string }[] {
+  const tiers: { tier: Tier; price: number; label: string }[] = [
+    { tier: "unidade", price: p.price, label: `${p.unit}` },
+  ];
+  if (p.pricePacote && p.labelPacote) {
+    tiers.push({ tier: "pacote", price: p.pricePacote, label: p.labelPacote });
+  }
+  if (p.priceCaixa && p.labelCaixa) {
+    tiers.push({ tier: "caixa", price: p.priceCaixa, label: p.labelCaixa });
+  }
+  return tiers;
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -59,7 +96,6 @@ export function LojaClient({
   const [error, setError] = useState("");
   const [orderInfo, setOrderInfo] = useState<{ id: string; email: string } | null>(null);
 
-  // Form state
   const [form, setForm] = useState({
     name: "", email: "", password: "", phone: "", cnpj: "", notes: "",
     loginEmail: "", loginPassword: "",
@@ -67,6 +103,7 @@ export function LojaClient({
 
   const cartItems = Object.values(cart);
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
+  const cartTotal = cartItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
 
   const filtered = products.filter((p) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
@@ -74,26 +111,29 @@ export function LojaClient({
     return matchSearch && matchCat;
   });
 
-  function addToCart(product: Product) {
+  function addToCart(product: Product, tier: Tier, price: number, label: string) {
+    const key = cartKey(product.id, tier);
+    const step = product.minQuantity ?? 1;
     setCart((prev) => {
-      const existing = prev[product.id];
+      const existing = prev[key];
       return {
         ...prev,
-        [product.id]: {
+        [key]: {
           product,
-          quantity: existing
-            ? existing.quantity + (product.minQuantity ?? 1)
-            : product.minQuantity ?? 1,
+          tier,
+          unitPrice: price,
+          tierLabel: label,
+          quantity: existing ? existing.quantity + step : step,
         },
       };
     });
   }
 
-  function updateQty(productId: string, qty: number) {
+  function updateQty(key: string, qty: number) {
     if (qty <= 0) {
-      setCart((prev) => { const n = { ...prev }; delete n[productId]; return n; });
+      setCart((prev) => { const n = { ...prev }; delete n[key]; return n; });
     } else {
-      setCart((prev) => ({ ...prev, [productId]: { ...prev[productId], quantity: qty } }));
+      setCart((prev) => ({ ...prev, [key]: { ...prev[key], quantity: qty } }));
     }
   }
 
@@ -105,6 +145,7 @@ export function LojaClient({
     const items = cartItems.map((i) => ({
       productId: i.product.id,
       quantity: i.quantity,
+      tier: i.tier,
     }));
 
     const body = tab === "novo"
@@ -170,7 +211,6 @@ export function LojaClient({
   if (step === "checkout") {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
         <header className="border-b border-gray-200 bg-white px-4 py-4">
           <div className="mx-auto flex max-w-2xl items-center gap-3">
             <button
@@ -194,31 +234,45 @@ export function LojaClient({
                 Resumo do pedido ({cartCount} iten(s))
               </h2>
               <div className="divide-y divide-gray-100">
-                {cartItems.map((item) => (
-                  <div key={item.product.id} className="flex items-center justify-between py-2">
-                    <span className="text-sm text-gray-700">{item.product.name}</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateQty(item.product.id, item.quantity - (item.product.minQuantity ?? 1))}
-                        className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-100"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="w-16 text-center text-sm font-medium">
-                        {item.quantity} {item.product.unit}
-                      </span>
-                      <button
-                        onClick={() => updateQty(item.product.id, item.quantity + (item.product.minQuantity ?? 1))}
-                        className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-100"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
+                {cartItems.map((item) => {
+                  const key = cartKey(item.product.id, item.tier);
+                  const step = item.product.minQuantity ?? 1;
+                  return (
+                    <div key={key} className="flex items-center justify-between py-2 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-800">{item.product.name}</p>
+                        <p className="text-xs text-gray-400">{item.tierLabel} · {fmtPrice(item.unitPrice)}/un</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => updateQty(key, item.quantity - step)}
+                          className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-100"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="w-14 text-center text-sm font-medium">
+                          {item.quantity} {item.product.unit}
+                        </span>
+                        <button
+                          onClick={() => updateQty(key, item.quantity + step)}
+                          className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-100"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        <span className="w-20 text-right text-sm font-semibold text-gray-800">
+                          {fmtPrice(item.unitPrice * item.quantity)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              <p className="mt-3 text-xs text-blue-800">
-                💡 Os preços serão informados após a aprovação do pedido.
+              <div className="mt-3 flex justify-between border-t border-gray-100 pt-3">
+                <span className="text-sm font-semibold text-gray-700">Total estimado</span>
+                <span className="text-sm font-bold text-gray-900">{fmtPrice(cartTotal)}</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-400">
+                * Preços sujeitos a confirmação na aprovação do pedido.
               </p>
             </CardContent>
           </Card>
@@ -368,7 +422,6 @@ export function LojaClient({
   // ── Catalog screen ──────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Banner */}
       {tenant.bannerUrl && (
         <div
           className="h-36 w-full bg-cover bg-center sm:h-48"
@@ -376,7 +429,6 @@ export function LojaClient({
         />
       )}
 
-      {/* Header */}
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
         <div className="mx-auto max-w-5xl px-4 py-4">
           <div className="flex items-center justify-between">
@@ -458,8 +510,7 @@ export function LojaClient({
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((product) => {
-            const cartItem = cart[product.id];
-            const inCart = !!cartItem;
+            const tiers = tiersOf(product);
             return (
               <div
                 key={product.id}
@@ -479,7 +530,6 @@ export function LojaClient({
                       <Package className="h-14 w-14 text-blue-200" />
                     </div>
                   )}
-                  {/* Badges overlay */}
                   <div className="absolute left-2 top-2 flex flex-col gap-1">
                     {product.minQuantity && (
                       <span className="rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
@@ -497,60 +547,67 @@ export function LojaClient({
 
                 {/* Info */}
                 <div className="flex flex-1 flex-col p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-800">
-                    por {product.unit}
-                  </p>
-                  <h3 className="mt-1 font-bold leading-snug text-gray-900 line-clamp-2">
+                  <h3 className="font-bold leading-snug text-gray-900 line-clamp-2">
                     {product.name}
                   </h3>
                   {product.description && (
-                    <p className="mt-1.5 flex-1 text-sm text-gray-500 line-clamp-2">
+                    <p className="mt-1 text-sm text-gray-500 line-clamp-2">
                       {product.description}
                     </p>
                   )}
 
-                  {/* Price + button */}
-                  <div className="mt-4 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1 text-gray-400">
-                      <span className="text-xs">R$</span>
-                      <span title="Preço disponível após aprovação">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                        </svg>
-                      </span>
-                    </div>
+                  {/* Tiers */}
+                  <div className="mt-3 space-y-2">
+                    {tiers.map(({ tier, price, label }) => {
+                      const key = cartKey(product.id, tier);
+                      const cartItem = cart[key];
+                      const step = product.minQuantity ?? 1;
 
-                    {!inCart ? (
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-bold uppercase tracking-wide text-white transition-opacity hover:opacity-90 active:scale-95"
-                        style={{ backgroundColor: tenant.corPrimaria }}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Adicionar
-                      </button>
-                    ) : (
-                      <div className="flex flex-1 items-center justify-between rounded-xl px-2 py-1"
-                        style={{ backgroundColor: `${tenant.corPrimaria}20` }}>
-                        <button
-                          onClick={() => updateQty(product.id, cartItem.quantity - (product.minQuantity ?? 1))}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-sm hover:bg-gray-50"
-                        >
-                          <Minus className="h-3.5 w-3.5 text-gray-700" />
-                        </button>
-                        <span className="text-sm font-bold" style={{ color: tenant.corPrimaria }}>
-                          {cartItem.quantity} {product.unit}
-                        </span>
-                        <button
-                          onClick={() => updateQty(product.id, cartItem.quantity + (product.minQuantity ?? 1))}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-sm"
-                          style={{ backgroundColor: tenant.corPrimaria }}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
+                      return (
+                        <div key={tier} className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs text-gray-500">{label}</p>
+                            <p className="text-sm font-bold text-gray-900">{fmtPrice(price)}</p>
+                          </div>
+
+                          {!cartItem ? (
+                            <button
+                              onClick={() => addToCart(product, tier, price, label)}
+                              className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90 active:scale-95"
+                              style={{ backgroundColor: tenant.corPrimaria }}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Adicionar
+                            </button>
+                          ) : (
+                            <div
+                              className="flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1"
+                              style={{ backgroundColor: `${tenant.corPrimaria}20` }}
+                            >
+                              <button
+                                onClick={() => updateQty(key, cartItem.quantity - step)}
+                                className="flex h-6 w-6 items-center justify-center rounded-md bg-white shadow-sm hover:bg-gray-50"
+                              >
+                                <Minus className="h-3 w-3 text-gray-700" />
+                              </button>
+                              <span
+                                className="min-w-[3rem] text-center text-xs font-bold"
+                                style={{ color: tenant.corPrimaria }}
+                              >
+                                {cartItem.quantity} {product.unit}
+                              </span>
+                              <button
+                                onClick={() => updateQty(key, cartItem.quantity + step)}
+                                className="flex h-6 w-6 items-center justify-center rounded-md text-white shadow-sm"
+                                style={{ backgroundColor: tenant.corPrimaria }}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -566,7 +623,7 @@ export function LojaClient({
         )}
       </main>
 
-      {/* Sticky bottom bar when cart has items */}
+      {/* Sticky bottom bar */}
       {cartCount > 0 && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white p-4 shadow-lg">
           <div className="mx-auto max-w-5xl">
@@ -579,7 +636,7 @@ export function LojaClient({
                 {cartItems.length} produto(s) · {cartCount} iten(s)
               </span>
               <span className="flex items-center gap-1">
-                Fazer Pedido
+                {fmtPrice(cartTotal)}
                 <ChevronRight className="h-4 w-4" />
               </span>
             </button>

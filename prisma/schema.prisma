@@ -209,6 +209,12 @@ model Product {
   unit        String           @default("un")
   minQuantity    Decimal?         @db.Decimal(10, 3)
   shelfLifeDays  Int?
+  // Preços por embalagem
+  pricePacote    Decimal?         @db.Decimal(10, 2)
+  priceCaixa     Decimal?         @db.Decimal(10, 2)
+  labelPacote    String?          // ex: "Pacote c/ 10 un"
+  labelCaixa     String?          // ex: "Caixa c/ 24 un"
+  // NF-e
   ncm            String?          // Código NCM para NF-e (8 dígitos)
   cfop           String?          @default("5102") // CFOP padrão — 5102 interno, 6102 interestadual
   active         Boolean          @default(true)
