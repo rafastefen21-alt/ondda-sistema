@@ -188,7 +188,7 @@ export default function CadastroPage() {
 
               {/* Slug */}
               <div className="space-y-1.5">
-                <Label htmlFor="slug">Endereço da sua loja *</Label>
+                <Label htmlFor="slug">Link da sua loja *</Label>
                 <div className="relative">
                   <Input
                     id="slug"
