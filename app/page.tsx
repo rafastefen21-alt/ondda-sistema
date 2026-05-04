@@ -5,6 +5,7 @@ import Image from "next/image";
 import { ArrowRight, MessageCircle, Mail, ChevronRight } from "lucide-react";
 import { Reveal } from "@/components/ui/reveal";
 import { PwaInstallButton } from "@/components/ui/pwa-install-button";
+import { HeroWaves } from "@/components/ui/hero-waves";
 
 export default async function RootPage() {
   const session = await auth();
@@ -70,9 +71,10 @@ export default async function RootPage() {
 
       {/* ════════════════ HERO ════════════════ */}
       <section className="relative overflow-hidden bg-white px-6 pb-0 pt-24 text-center">
-        {/* Mesh gradient bg */}
+        {/* Mesh gradient bg + wave lines */}
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-b from-blue-100/60 via-cyan-50/30 to-transparent blur-3xl" />
+          <HeroWaves />
         </div>
 
         {/* Headline */}
