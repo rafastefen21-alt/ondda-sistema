@@ -149,7 +149,7 @@ export default function CadastroPage() {
             alt="Ondda"
             width={120}
             height={120}
-            className="mb-3 h-24 w-auto rounded-2xl shadow-lg"
+            className="mb-3 h-24 w-auto rounded-2xl"
           />
           <p className="mt-1 text-sm text-gray-500">
             Crie sua conta e comece a gerenciar sua distribuidora
