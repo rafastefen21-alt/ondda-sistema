@@ -6,10 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, CreditCard, Eye, EyeOff, Link2, FileText, AlertCircle } from "lucide-react";
+import {
+  CheckCircle, CreditCard, Eye, EyeOff, Link2, FileText,
+  AlertCircle, User, LogOut, Loader2,
+} from "lucide-react";
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2";
+
+interface MpAccount {
+  id:       number;
+  nickname: string | null;
+  email:    string | null;
+  fullName: string | null;
+  siteId:   string | null;
+}
 
 interface Props {
   initial: {
@@ -40,7 +51,8 @@ export function IntegracoesForm({ initial }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mercado Pago
+  // ── Mercado Pago state ────────────────────────────────────────────────────────
+  const [mpConfigured,  setMpConfigured]  = useState(!!(initial.mpPublicKey && initial.mpAccessToken));
   const [mpPublicKey,   setMpPublicKey]   = useState(initial.mpPublicKey   ?? "");
   const [mpAccessToken, setMpAccessToken] = useState(initial.mpAccessToken ?? "");
   const [showMpToken,   setShowMpToken]   = useState(false);
@@ -48,7 +60,25 @@ export function IntegracoesForm({ initial }: Props) {
   const [successMp,     setSuccessMp]     = useState(false);
   const [errorMp,       setErrorMp]       = useState("");
 
-  // Focus NF-e
+  // Conta MP conectada
+  const [mpAccount,        setMpAccount]        = useState<MpAccount | null>(null);
+  const [mpAccountLoading, setMpAccountLoading] = useState(false);
+  const [disconnecting,    setDisconnecting]    = useState(false);
+
+  // Busca info da conta quando configurado
+  useEffect(() => {
+    if (!mpConfigured) return;
+    setMpAccountLoading(true);
+    fetch("/api/configuracoes/mp-info")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.email || data.nickname) setMpAccount(data);
+      })
+      .catch(() => {})
+      .finally(() => setMpAccountLoading(false));
+  }, [mpConfigured]);
+
+  // ── Focus NF-e state ─────────────────────────────────────────────────────────
   const [focusNfeToken, setFocusNfeToken] = useState(initial.focusNfeToken ?? "");
   const [nfeAmbiente,   setNfeAmbiente]   = useState(initial.nfeAmbiente   ?? "homologacao");
   const [showNfeToken,  setShowNfeToken]  = useState(false);
@@ -56,6 +86,7 @@ export function IntegracoesForm({ initial }: Props) {
   const [successNfe,    setSuccessNfe]    = useState(false);
   const [errorNfe,      setErrorNfe]      = useState("");
 
+  // ── Salvar credenciais MP manualmente ────────────────────────────────────────
   async function saveMp(e: React.FormEvent) {
     e.preventDefault();
     setLoadingMp(true);
@@ -71,11 +102,31 @@ export function IntegracoesForm({ initial }: Props) {
       setErrorMp("Erro ao salvar. Verifique os dados e tente novamente.");
     } else {
       setSuccessMp(true);
+      setMpConfigured(!!(mpPublicKey && mpAccessToken));
       router.refresh();
       setTimeout(() => setSuccessMp(false), 3000);
     }
   }
 
+  // ── Desconectar MP ────────────────────────────────────────────────────────────
+  async function disconnectMp() {
+    setDisconnecting(true);
+    const res = await fetch("/api/configuracoes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mpPublicKey: null, mpAccessToken: null }),
+    });
+    setDisconnecting(false);
+    if (res.ok) {
+      setMpPublicKey("");
+      setMpAccessToken("");
+      setMpConfigured(false);
+      setMpAccount(null);
+      router.refresh();
+    }
+  }
+
+  // ── Salvar NF-e ──────────────────────────────────────────────────────────────
   async function saveNfe(e: React.FormEvent) {
     e.preventDefault();
     setLoadingNfe(true);
@@ -96,7 +147,6 @@ export function IntegracoesForm({ initial }: Props) {
     }
   }
 
-  const mpConfigured  = !!(initial.mpPublicKey && initial.mpAccessToken);
   const nfeConfigured = !!initial.focusNfeToken;
 
   return (
@@ -112,7 +162,7 @@ export function IntegracoesForm({ initial }: Props) {
                 mpConfigured ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
               }`}
             >
-              {mpConfigured ? "Configurado" : "Pendente"}
+              {mpConfigured ? "Conectado" : "Pendente"}
             </span>
           </CardTitle>
         </CardHeader>
@@ -137,7 +187,59 @@ export function IntegracoesForm({ initial }: Props) {
             </div>
           )}
 
-          {/* Botão OAuth — link direto para a rota que inicia o fluxo */}
+          {/* ── Conta conectada ── */}
+          {mpConfigured && (
+            <div className="mb-5 rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
+                    {mpAccountLoading
+                      ? <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+                      : <User className="h-5 w-5 text-green-600" />
+                    }
+                  </div>
+                  <div>
+                    {mpAccountLoading ? (
+                      <p className="text-sm text-green-700">Carregando dados da conta...</p>
+                    ) : mpAccount ? (
+                      <>
+                        <p className="text-sm font-semibold text-green-800">
+                          {mpAccount.fullName ?? mpAccount.nickname ?? "Conta conectada"}
+                        </p>
+                        {mpAccount.email && (
+                          <p className="text-xs text-green-600">{mpAccount.email}</p>
+                        )}
+                        {mpAccount.nickname && mpAccount.nickname !== mpAccount.fullName && (
+                          <p className="text-xs text-green-500">@{mpAccount.nickname}</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-green-800">Conta conectada</p>
+                    )}
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      Mercado Pago ativo
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={disconnectMp}
+                  disabled={disconnecting}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                >
+                  {disconnecting
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <LogOut className="h-3.5 w-3.5" />
+                  }
+                  {disconnecting ? "Desconectando..." : "Desconectar"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Botão OAuth */}
           <a
             href="/api/auth/mercadopago"
             className="mb-5 flex items-center gap-3 rounded-lg border border-[#009EE3]/30 bg-[#009EE3]/5 px-4 py-3 transition hover:bg-[#009EE3]/10"
@@ -151,7 +253,7 @@ export function IntegracoesForm({ initial }: Props) {
               </p>
               <p className="text-xs text-gray-400">
                 {mpConfigured
-                  ? "Tokens salvos — clique para renovar a autorização"
+                  ? "Clique para renovar a autorização OAuth"
                   : "Autorize com um clique, sem precisar copiar chaves"}
               </p>
             </div>
