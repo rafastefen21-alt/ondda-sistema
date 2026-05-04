@@ -137,6 +137,17 @@ model User {
   city          String?
   state         String?
   codigoCidade  String?
+  phone         String?
+  // Contato financeiro
+  financeiroNome   String?
+  financeiroEmail  String?
+  financeiroPhone  String?
+  // Tomador de decisão
+  decisorNome      String?
+  decisorEmail     String?
+  decisorPhone     String?
+  // Observações internas
+  observacoes      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
