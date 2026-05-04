@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import {
-  List, Columns, ChevronRight, ShoppingCart, ArrowRight
+  List, Columns, ShoppingCart, ArrowRight, Plus
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatCurrency, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, canSeePrice } from "@/lib/utils";
@@ -161,6 +161,15 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
               className="inline-flex items-center gap-2 rounded-md bg-blue-800 px-4 py-2 text-sm font-medium text-white hover:bg-blue-900"
             >
               <ShoppingCart className="h-4 w-4" />
+              Novo Pedido
+            </Link>
+          )}
+          {!isClient && canAdvance && (
+            <Link
+              href="/pedidos/novo"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-800 px-4 py-2 text-sm font-medium text-white hover:bg-blue-900"
+            >
+              <Plus className="h-4 w-4" />
               Novo Pedido
             </Link>
           )}

@@ -12,13 +12,19 @@ const createOrderSchema = z.object({
         productId: z.string(),
         quantity: z.number().positive(),
         unitPrice: z.number().positive(),
+        notes: z.string().optional(),
       })
     )
     .min(1),
   notes: z.string().optional(),
+  internalNotes: z.string().optional(),
   requestedDate: z.string().optional(),
+  scheduledDeliveryDate: z.string().optional(),
   deliveryAddress: z.string().optional(),
   paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  // Admin-only fields
+  clientId: z.string().optional(),
+  status: z.enum(["RASCUNHO", "PENDENTE_APROVACAO", "APROVADO"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -33,34 +39,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const { tenantId, role, id: sessionUserId } = session.user;
+  const isAdmin = ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(role);
+
+  // Resolve clientId
+  let clientId = sessionUserId;
+  if (parsed.data.clientId && isAdmin) {
+    // Verify the client belongs to this tenant
+    const client = await prisma.user.findFirst({
+      where: { id: parsed.data.clientId, tenantId },
+    });
+    if (!client) {
+      return NextResponse.json({ error: "Cliente inválido" }, { status: 400 });
+    }
+    clientId = parsed.data.clientId;
+  }
+
   // Verify all products belong to this tenant
   const productIds = parsed.data.items.map((i) => i.productId);
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, tenantId: session.user.tenantId },
+    where: { id: { in: productIds }, tenantId },
   });
   if (products.length !== productIds.length) {
-    return NextResponse.json(
-      { error: "Produto inválido" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Produto inválido" }, { status: 400 });
   }
+
+  // Determine initial status
+  const initialStatus = (isAdmin && parsed.data.status) ? parsed.data.status : "PENDENTE_APROVACAO";
 
   const order = await prisma.order.create({
     data: {
-      tenantId: session.user.tenantId,
-      clientId: session.user.id,
-      status: "PENDENTE_APROVACAO",
-      notes: parsed.data.notes,
-      requestedDate: parsed.data.requestedDate
-        ? new Date(parsed.data.requestedDate)
-        : null,
-      deliveryAddress: parsed.data.deliveryAddress,
-      paymentMethod: parsed.data.paymentMethod ?? null,
+      tenantId,
+      clientId,
+      status: initialStatus,
+      notes:         parsed.data.notes ?? null,
+      internalNotes: parsed.data.internalNotes ?? null,
+      requestedDate: parsed.data.requestedDate ? new Date(parsed.data.requestedDate) : null,
+      scheduledDeliveryDate: parsed.data.scheduledDeliveryDate ? new Date(parsed.data.scheduledDeliveryDate) : null,
+      deliveryAddress: parsed.data.deliveryAddress ?? null,
+      paymentMethod:   parsed.data.paymentMethod ?? null,
+      // If admin creates as APROVADO, record approval info
+      ...(initialStatus === "APROVADO" ? {
+        approvedAt:   new Date(),
+        approvedById: sessionUserId,
+      } : {}),
       items: {
         create: parsed.data.items.map((item) => ({
           productId: item.productId,
-          quantity: item.quantity,
+          quantity:  item.quantity,
           unitPrice: item.unitPrice,
+          notes:     item.notes ?? null,
         })),
       },
     },
