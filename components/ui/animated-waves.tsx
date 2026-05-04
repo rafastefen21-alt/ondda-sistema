@@ -1,91 +1,92 @@
 "use client";
 
+// Each wave line definition
+// top:      vertical position (% of screen)
+// period:   horizontal cycle length in px (controls "zoom" of the wave)
+// amp:      vertical amplitude in px
+// speed:    scroll duration in seconds
+// reverse:  direction
+// color:    stroke color
+// opacity:  stroke opacity
+// width:    stroke width
+const WAVES = [
+  { top:  4, period: 900,  amp: 28, speed: 26, reverse: false, color: "#2563eb", opacity: 0.18, width: 1.4 },
+  { top: 14, period: 1200, amp: 18, speed: 35, reverse: true,  color: "#06b6d4", opacity: 0.13, width: 1.0 },
+  { top: 25, period: 720,  amp: 32, speed: 18, reverse: false, color: "#3b82f6", opacity: 0.22, width: 1.6 },
+  { top: 36, period: 1440, amp: 14, speed: 42, reverse: true,  color: "#0891b2", opacity: 0.12, width: 0.9 },
+  { top: 48, period: 960,  amp: 36, speed: 14, reverse: false, color: "#1d4ed8", opacity: 0.20, width: 1.5 },
+  { top: 59, period: 1100, amp: 22, speed: 30, reverse: true,  color: "#0ea5e9", opacity: 0.15, width: 1.1 },
+  { top: 70, period: 800,  amp: 30, speed: 20, reverse: false, color: "#2563eb", opacity: 0.18, width: 1.4 },
+  { top: 80, period: 1300, amp: 16, speed: 38, reverse: true,  color: "#06b6d4", opacity: 0.13, width: 1.0 },
+  { top: 90, period: 680,  amp: 24, speed: 16, reverse: false, color: "#60a5fa", opacity: 0.16, width: 1.2 },
+];
+
+/** Builds a seamless sinusoidal path for a given period, amplitude, and total width (2× viewport). */
+function buildPath(period: number, amp: number, totalWidth = 5760): string {
+  const cy = amp + 2; // center y with a little padding
+  const cp1x = period / 4;
+  const cp2x = (3 * period) / 4;
+  const cycles = Math.ceil(totalWidth / period) + 1;
+
+  let d = `M0,${cy}`;
+  for (let i = 0; i < cycles; i++) {
+    const x0 = i * period;
+    d += ` C${x0 + cp1x},${cy - amp} ${x0 + cp2x},${cy + amp} ${x0 + period},${cy}`;
+  }
+  return d;
+}
+
 export function AnimatedWaves() {
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/60 to-cyan-50/50">
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/50 to-cyan-50/40">
       <style>{`
-        @keyframes ondaScroll {
+        @keyframes waveLine {
           0%   { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
-        .onda-slow  { animation: ondaScroll 20s linear infinite; }
-        .onda-med   { animation: ondaScroll 13s linear infinite; }
-        .onda-fast  { animation: ondaScroll 8s linear infinite; }
-        .onda-rev   { animation: ondaScroll 16s linear infinite reverse; }
+        ${WAVES.map((_, i) => `
+          .wl-${i} {
+            animation: waveLine ${WAVES[i].speed}s linear infinite ${WAVES[i].reverse ? "reverse" : ""};
+          }
+        `).join("")}
       `}</style>
 
-      {/* ── Ondas no topo (invertidas) ── */}
-      <div className="absolute top-0 left-0 right-0 h-36 rotate-180 opacity-70">
-        <div className="onda-rev absolute inset-0 w-[200%]">
-          <svg viewBox="0 0 2880 144" preserveAspectRatio="none" className="h-full w-full">
-            <defs>
-              <linearGradient id="gt" x1="0" x2="1" y1="0" y2="0">
-                <stop offset="0%"   stopColor="#06b6d4" stopOpacity="0.18" />
-                <stop offset="100%" stopColor="#2563eb" stopOpacity="0.18" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,72 C240,144 480,0 720,72 C960,144 1200,0 1440,72
-                 C1680,144 1920,0 2160,72 C2400,144 2640,0 2880,72
-                 L2880,144 L0,144 Z"
-              fill="url(#gt)"
-            />
-          </svg>
-        </div>
-      </div>
+      {WAVES.map((w, i) => {
+        const totalW = 5760; // 200% of 2880 (common screen width)
+        const svgH   = w.amp * 2 + 4;
+        const path   = buildPath(w.period, w.amp, totalW);
 
-      {/* ── Ondas na base — camada de trás ── */}
-      <div className="absolute bottom-0 left-0 right-0 h-72">
-        <div className="onda-slow absolute inset-0 w-[200%]">
-          <svg viewBox="0 0 2880 288" preserveAspectRatio="none" className="h-full w-full">
-            <defs>
-              <linearGradient id="gb" x1="0" x2="1" y1="0" y2="0">
-                <stop offset="0%"   stopColor="#2563eb" stopOpacity="0.14" />
-                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.14" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,144 C360,0 720,288 1080,144 C1440,0 1800,288 2160,144
-                 C2520,0 2880,288 2880,144 L2880,288 L0,288 Z"
-              fill="url(#gb)"
-            />
-          </svg>
-        </div>
-
-        {/* Camada do meio */}
-        <div className="onda-med absolute w-[200%]" style={{ top: "25%", bottom: 0 }}>
-          <svg viewBox="0 0 2880 220" preserveAspectRatio="none" className="h-full w-full">
-            <defs>
-              <linearGradient id="gm" x1="0" x2="1" y1="0" y2="0">
-                <stop offset="0%"   stopColor="#0891b2" stopOpacity="0.13" />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.13" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,110 C480,220 960,0 1440,110 C1920,220 2400,0 2880,110
-                 L2880,220 L0,220 Z"
-              fill="url(#gm)"
-            />
-          </svg>
-        </div>
-
-        {/* Camada da frente */}
-        <div className="onda-fast absolute w-[200%]" style={{ top: "48%", bottom: 0 }}>
-          <svg viewBox="0 0 2880 160" preserveAspectRatio="none" className="h-full w-full">
-            <defs>
-              <linearGradient id="gf" x1="0" x2="1" y1="0" y2="0">
-                <stop offset="0%"   stopColor="#06b6d4" stopOpacity="0.18" />
-                <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.18" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,80 C320,160 640,0 960,80 C1280,160 1600,0 1920,80
-                 C2240,160 2560,0 2880,80 L2880,160 L0,160 Z"
-              fill="url(#gf)"
-            />
-          </svg>
-        </div>
-      </div>
+        return (
+          <div
+            key={i}
+            className={`wl-${i} absolute`}
+            style={{
+              top:    `${w.top}%`,
+              left:   0,
+              width:  `${totalW}px`,
+              height: `${svgH}px`,
+              marginTop: `-${svgH / 2}px`, // center the line on the top% position
+            }}
+          >
+            <svg
+              viewBox={`0 0 ${totalW} ${svgH}`}
+              preserveAspectRatio="none"
+              width={totalW}
+              height={svgH}
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d={path}
+                fill="none"
+                stroke={w.color}
+                strokeWidth={w.width}
+                strokeOpacity={w.opacity}
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+        );
+      })}
     </div>
   );
 }
