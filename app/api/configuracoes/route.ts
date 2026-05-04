@@ -17,6 +17,7 @@ const schema = z.object({
   // Dados fiscais
   cnpj:             z.string().optional().nullable(),
   ie:               z.string().optional().nullable(),
+  im:               z.string().optional().nullable(),
   cnae:             z.string().optional().nullable(),
   regimeTributario: z.string().optional().nullable(),
   cep:              z.string().optional().nullable(),
@@ -63,6 +64,7 @@ export async function PATCH(req: NextRequest) {
       // dados fiscais
       ...(d.cnpj             !== undefined ? { cnpj:             d.cnpj             || null } : {}),
       ...(d.ie               !== undefined ? { ie:               d.ie               || null } : {}),
+      ...(d.im               !== undefined ? { im:               d.im               || null } : {}),
       ...(d.cnae             !== undefined ? { cnae:             d.cnae             || null } : {}),
       ...(d.regimeTributario !== undefined ? { regimeTributario: d.regimeTributario || null } : {}),
       ...(d.cep              !== undefined ? { cep:              d.cep              || null } : {}),

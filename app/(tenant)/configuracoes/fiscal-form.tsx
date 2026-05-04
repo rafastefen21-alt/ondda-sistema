@@ -15,6 +15,7 @@ interface FiscalData {
   // já existentes no tenant
   cnpj:            string | null;
   ie:              string | null;
+  im:              string | null;
   cnae:            string | null;
   regimeTributario: string | null;
   // endereço estruturado
@@ -39,6 +40,7 @@ export function FiscalForm({ initial }: Props) {
 
   const [cnpj,             setCnpj]             = useState(initial.cnpj             ?? "");
   const [ie,               setIe]               = useState(initial.ie               ?? "");
+  const [im,               setIm]               = useState(initial.im               ?? "");
   const [cnae,             setCnae]             = useState(initial.cnae             ?? "");
   const [regimeTributario, setRegimeTributario] = useState(initial.regimeTributario ?? "");
   const [cep,              setCep]              = useState(initial.cep              ?? "");
@@ -92,6 +94,7 @@ export function FiscalForm({ initial }: Props) {
       body: JSON.stringify({
         cnpj:             cnpj             || null,
         ie:               ie               || null,
+        im:               im               || null,
         cnae:             cnae             || null,
         regimeTributario: regimeTributario || null,
         cep:              cep              || null,
@@ -176,6 +179,16 @@ export function FiscalForm({ initial }: Props) {
                   placeholder="Ex: 123.456.789.110"
                 />
                 <p className="text-xs text-gray-400">Use "ISENTO" se não tiver IE.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="im">Inscrição Municipal (IM)</Label>
+                <Input
+                  id="im"
+                  value={im}
+                  onChange={(e) => setIm(e.target.value)}
+                  placeholder="Ex: 12345678"
+                />
+                <p className="text-xs text-gray-400">Necessária para emissão de NFS-e.</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cnae">CNAE *</Label>

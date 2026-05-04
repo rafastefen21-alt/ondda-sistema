@@ -142,6 +142,7 @@ export default async function ConfiguracoesPage() {
             initial={{
               cnpj:             tenant.cnpj             ?? null,
               ie:               tenant.ie               ?? null,
+              im:               tenant.im               ?? null,
               cnae:             tenant.cnae             ?? null,
               regimeTributario: tenant.regimeTributario ?? null,
               cep:              tenant.cep              ?? null,

@@ -82,6 +82,7 @@ model Tenant {
 
   // Dados fiscais para emissão de NF-e
   ie               String?  // Inscrição Estadual
+  im               String?  // Inscrição Municipal
   cnae             String?  // Código CNAE (7 dígitos)
   regimeTributario String?  // "1" Simples Nacional | "2" Simples Excesso | "3" Regime Normal
   cep              String?
