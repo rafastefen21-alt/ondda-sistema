@@ -71,11 +71,14 @@ export default async function RootPage() {
 
       {/* ════════════════ HERO ════════════════ */}
       <section className="relative overflow-hidden bg-white px-6 pb-0 pt-24 text-center">
-        {/* Mesh gradient bg + wave lines */}
-        <div className="pointer-events-none absolute inset-0 -z-10">
+        {/* Mesh gradient + wave lines — z-0, behind content */}
+        <div className="pointer-events-none absolute inset-0 z-0">
           <div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-b from-blue-100/60 via-cyan-50/30 to-transparent blur-3xl" />
           <HeroWaves />
         </div>
+
+        {/* Content — z-10 so it sits above the wave lines */}
+        <div className="relative z-10">
 
         {/* Headline */}
         <h1 className="h-title mx-auto max-w-4xl text-5xl font-extrabold leading-[1.08] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
@@ -133,6 +136,7 @@ export default async function RootPage() {
           {/* Bottom fade */}
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white to-transparent" />
         </div>
+        </div>{/* end z-10 content wrapper */}
       </section>
 
       {/* ════════════════ FEATURES ════════════════ */}
