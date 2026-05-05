@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { OrderStatus } from "@/app/generated/prisma/client";
+import { sendOrderStatusEmail } from "@/lib/email";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -182,8 +183,45 @@ export async function PATCH(
   const updated = await prisma.order.update({
     where: { id },
     data: updateData,
-    include: { items: { include: { product: true } } },
+    include: {
+      items: { include: { product: { select: { name: true, unit: true } } } },
+      client: {
+        select: {
+          name: true, email: true,
+          decisorEmail: true, decisorNome: true,
+        },
+      },
+      tenant: { select: { name: true } },
+    },
   });
+
+  // ── Envia e-mail de notificação se houve mudança de status ────────────────
+  if (parsed.data.status) {
+    const { client, tenant } = updated;
+
+    // Destinatários: decisorEmail (principal) + email do cliente (fallback/cópia)
+    const recipients = [client.decisorEmail, client.email].filter(Boolean) as string[];
+    // Remove duplicatas caso sejam iguais
+    const uniqueRecipients = [...new Set(recipients)];
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+    // Fire-and-forget — não bloqueia a resposta
+    sendOrderStatusEmail(uniqueRecipients, {
+      orderId:   updated.id,
+      status:    parsed.data.status,
+      tenantName: tenant.name,
+      clientName: client.decisorNome ?? client.name ?? client.email,
+      items: updated.items.map((i) => ({
+        productName: i.product.name,
+        quantity:    Number(i.quantity),
+        unit:        i.product.unit,
+        unitPrice:   Number(i.unitPrice),
+      })),
+      scheduledDeliveryDate: updated.scheduledDeliveryDate,
+      appUrl,
+    }).catch((err) => console.error("[EMAIL] falha silenciosa:", err));
+  }
 
   return NextResponse.json(updated);
 }
