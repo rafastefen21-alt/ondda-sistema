@@ -21,7 +21,7 @@ export async function PATCH(
   const body = await req.json();
   const {
     name, email, password,
-    cnpj, cpf, phone,
+    cnpj, cpf, ie, phone,
     cep, logradouro, numero, complemento, bairro, city, state, codigoCidade,
     financeiroNome, financeiroEmail, financeiroPhone,
     decisorNome, decisorEmail, decisorPhone,
@@ -48,6 +48,7 @@ export async function PATCH(
     phone:           phone          !== undefined ? phone   || null : existing.phone,
     cnpj:            cnpj           !== undefined ? cnpj    || null : existing.cnpj,
     cpf:             cpf            !== undefined ? cpf     || null : existing.cpf,
+    ie:              ie             !== undefined ? ie      || null : existing.ie,
     cep:             cep            !== undefined ? cep     || null : existing.cep,
     logradouro:      logradouro     !== undefined ? logradouro     || null : existing.logradouro,
     numero:          numero         !== undefined ? numero         || null : existing.numero,

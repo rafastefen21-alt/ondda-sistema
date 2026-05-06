@@ -52,6 +52,7 @@ export interface NfeClient {
   email:        string;
   cpf:          string | null;
   cnpj:         string | null;
+  ie:           string | null;   // Inscrição Estadual — define indIEDest e consumidor_final
   cep:          string | null;
   logradouro:   string | null;
   numero:       string | null;
@@ -221,7 +222,11 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
     tipo_documento:     1,             // 1 = saída
     local_destino:      localDestino,  // 1 = interna | 2 = interestadual
     finalidade_emissao: 1,             // 1 = NF-e normal
-    consumidor_final:   c.cnpj ? 0 : 1,
+    // consumidor_final:
+    //   0 = não é consumidor final (B2B — cliente tem CNPJ e IE cadastrada)
+    //   1 = consumidor final (B2C ou não contribuinte — sem IE)
+    // SEFAZ regra 696: quando indIEDest=9 (sem IE), consumidor_final DEVE ser 1.
+    consumidor_final:   (c.cnpj && c.ie) ? 0 : 1,
     presenca_comprador: 2,             // 2 = não presencial
 
     // Emitente — campos na raiz com sufixo _emitente
@@ -239,7 +244,10 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
     // Destinatário — campos na raiz com sufixo _destinatario
     nome_destinatario:                    c.name ?? "Consumidor Final",
     email_destinatario:                   c.email,
-    inscricao_estadual_destinatario:      null,
+    // IE do destinatário:
+    //   - com IE → indIEDest=1 (contribuinte), consumidor_final=0
+    //   - sem IE → indIEDest=9 (não contribuinte), consumidor_final=1 (obrigatório)
+    inscricao_estadual_destinatario:      c.ie ? digits(c.ie) || null : null,
 
     // Totais
     valor_produtos:   valorProdutos,

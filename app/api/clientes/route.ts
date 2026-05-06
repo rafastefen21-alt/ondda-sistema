@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const body = await req.json();
   const {
     name, email, password,
-    cnpj, cpf, phone,
+    cnpj, cpf, ie, phone,
     cep, logradouro, numero, complemento, bairro, city, state, codigoCidade,
     financeiroNome, financeiroEmail, financeiroPhone,
     decisorNome, decisorEmail, decisorPhone,
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
       phone:        phone          || null,
       cnpj:         cnpj           || null,
       cpf:          cpf            || null,
+      ie:           ie             || null,
       cep:          cep            || null,
       logradouro:   logradouro     || null,
       numero:       numero         || null,

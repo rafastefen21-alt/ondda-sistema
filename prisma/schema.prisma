@@ -136,6 +136,7 @@ model User {
   active        Boolean   @default(true)
   cnpj          String?
   cpf           String?
+  ie            String?  // Inscrição Estadual (para NF-e: indIEDest e consumidor_final)
   // Endereço fiscal (para NF-e como destinatário)
   cep           String?
   logradouro    String?

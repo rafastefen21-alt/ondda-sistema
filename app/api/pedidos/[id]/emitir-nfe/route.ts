@@ -35,7 +35,7 @@ export async function POST(
       client: {
         select: {
           name: true, email: true,
-          cpf: true, cnpj: true,
+          cpf: true, cnpj: true, ie: true,
           cep: true, logradouro: true, numero: true,
           bairro: true, city: true, state: true, codigoCidade: true,
         },

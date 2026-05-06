@@ -24,6 +24,7 @@ type ClienteData = {
   phone?: string;
   cnpj?: string | null;
   cpf?: string | null;
+  ie?: string | null;
   cep?: string | null;
   logradouro?: string | null;
   numero?: string | null;
@@ -61,6 +62,7 @@ export function ClienteForm({
   const [cepLoading, setCepLoading] = useState(false);
   const [cnpj, setCnpj] = useState(client?.cnpj ?? "");
   const [cpf,  setCpf]  = useState(client?.cpf  ?? "");
+  const [ie,   setIe]   = useState(client?.ie   ?? "");
 
   function maskCep(raw: string): string {
     const d = raw.replace(/\D/g, "").slice(0, 8);
@@ -100,6 +102,7 @@ export function ClienteForm({
       phone:        fd.get("phone")   || null,
       cnpj:         cnpj || null,
       cpf:          cpf  || null,
+      ie:           ie   || null,
       cep:          cep               || null,
       logradouro:   logradouro        || null,
       numero:       fd.get("numero")  || null,
@@ -347,6 +350,22 @@ export function ClienteForm({
                 ) : (
                   <p className="text-xs text-gray-400">Preencha CNPJ ou CPF.</p>
                 )}
+              </div>
+
+              {/* IE — ocupa linha inteira */}
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="ie">Inscrição Estadual (IE)</Label>
+                <Input
+                  id="ie"
+                  value={ie}
+                  onChange={(e) => setIe(e.target.value)}
+                  placeholder='Ex: 123.456.789.110 ou "ISENTO"'
+                  maxLength={30}
+                />
+                <p className="text-xs text-gray-400">
+                  Obrigatória para NF-e B2B. Sem IE = operação com consumidor final (indIEDest=9).
+                  Use <strong>ISENTO</strong> se o cliente for isento de IE.
+                </p>
               </div>
             </div>
 
