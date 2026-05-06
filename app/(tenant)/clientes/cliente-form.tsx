@@ -59,9 +59,15 @@ export function ClienteForm({
   const [codigoCidade, setCodigoCidade] = useState(client?.codigoCidade ?? "");
   const [cepLoading, setCepLoading] = useState(false);
 
+  function maskCep(raw: string): string {
+    const d = raw.replace(/\D/g, "").slice(0, 8);
+    return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+  }
+
   async function buscarCep(value: string) {
-    const d = value.replace(/\D/g, "");
-    setCep(value);
+    const masked = maskCep(value);
+    const d = masked.replace(/\D/g, "");
+    setCep(masked);
     if (d.length !== 8) return;
     setCepLoading(true);
     try {
@@ -322,6 +328,11 @@ export function ClienteForm({
                     onChange={(e) => buscarCep(e.target.value)}
                     placeholder="00000-000"
                     maxLength={9}
+                    className={
+                      cep && cep.replace(/\D/g, "").length !== 8
+                        ? "border-red-400 focus:ring-red-400"
+                        : ""
+                    }
                   />
                   {cepLoading && (
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">...</span>

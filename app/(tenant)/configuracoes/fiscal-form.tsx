@@ -58,10 +58,17 @@ export function FiscalForm({ initial }: Props) {
   const [error,    setError]    = useState("");
   const [cepLoading, setCepLoading] = useState(false);
 
+  /** Aplica máscara 00000-000 e limita a 8 dígitos */
+  function maskCep(raw: string): string {
+    const d = raw.replace(/\D/g, "").slice(0, 8);
+    return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+  }
+
   // Preenchimento automático pelo CEP (ViaCEP)
   async function buscarCep(value: string) {
-    const digits = value.replace(/\D/g, "");
-    setCep(value);
+    const masked = maskCep(value);
+    const digits = masked.replace(/\D/g, "");
+    setCep(masked);
     if (digits.length !== 8) return;
 
     setCepLoading(true);
@@ -253,6 +260,11 @@ export function FiscalForm({ initial }: Props) {
                     onChange={(e) => buscarCep(e.target.value)}
                     placeholder="00000-000"
                     maxLength={9}
+                    className={
+                      cep && cep.replace(/\D/g, "").length !== 8
+                        ? "border-red-400 focus:ring-red-400"
+                        : ""
+                    }
                   />
                   {cepLoading && (
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
@@ -260,7 +272,12 @@ export function FiscalForm({ initial }: Props) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-400">Preenchimento automático.</p>
+                {cep && cep.replace(/\D/g, "").length !== 8 && (
+                  <p className="text-xs text-red-500">CEP deve ter 8 dígitos (ex: 03342-000)</p>
+                )}
+                {(!cep || cep.replace(/\D/g, "").length === 8) && (
+                  <p className="text-xs text-gray-400">Preenchimento automático.</p>
+                )}
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="logradouro">Logradouro *</Label>
