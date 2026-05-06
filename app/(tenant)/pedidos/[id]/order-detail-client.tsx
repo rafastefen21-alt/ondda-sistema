@@ -210,6 +210,29 @@ export function OrderDetailClient({
     }
   }
 
+  const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+
+  async function markAsPaid(paymentId: string) {
+    setMarkingPaid(paymentId);
+    try {
+      const res = await fetch(`/api/pagamentos/${paymentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PAGO" }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error ?? "Erro ao marcar como pago.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      alert("Erro de conexão.");
+    } finally {
+      setMarkingPaid(null);
+    }
+  }
+
   const [emittingNfe, setEmittingNfe] = useState(false);
   const [nfeError,    setNfeError]    = useState<{
     message: string;
@@ -568,19 +591,34 @@ export function OrderDetailClient({
                               </span>
                             </div>
                             {canUseMp && p.status !== "PAGO" && (
-                              <button
-                                onClick={() => generateMpLink(p.id)}
-                                disabled={mpLoading[p.id]}
-                                title="Gerar link de pagamento no Mercado Pago"
-                                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-                              >
-                                {mpLoading[p.id] ? (
-                                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                                ) : (
-                                  <Link2 className="h-3.5 w-3.5" />
-                                )}
-                                {mpLoading[p.id] ? "Gerando..." : "Gerar link MP"}
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => markAsPaid(p.id)}
+                                  disabled={!!markingPaid}
+                                  title="Marcar parcela como paga manualmente"
+                                  className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-xs font-medium text-green-700 transition hover:bg-green-100 disabled:opacity-50"
+                                >
+                                  {markingPaid === p.id ? (
+                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-green-500 border-t-transparent" />
+                                  ) : (
+                                    <CheckCircle className="h-3.5 w-3.5" />
+                                  )}
+                                  {markingPaid === p.id ? "Salvando..." : "Marcar pago"}
+                                </button>
+                                <button
+                                  onClick={() => generateMpLink(p.id)}
+                                  disabled={mpLoading[p.id]}
+                                  title="Gerar link de pagamento no Mercado Pago"
+                                  className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                                >
+                                  {mpLoading[p.id] ? (
+                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                                  ) : (
+                                    <Link2 className="h-3.5 w-3.5" />
+                                  )}
+                                  {mpLoading[p.id] ? "Gerando..." : "Gerar link MP"}
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>

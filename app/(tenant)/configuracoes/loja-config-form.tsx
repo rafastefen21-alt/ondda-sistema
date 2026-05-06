@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Palette, ExternalLink, Check, Upload, X, ImageIcon } from "lucide-react";
+import { Palette, ExternalLink, Check, Upload, X, ImageIcon, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ interface Props {
     lojaBannerUrl: string | null;
     lojaLogoUrl: string | null;
     lojaDescricao: string | null;
+    lojaPedidoMinimo: number | null;
   };
 }
 
@@ -22,6 +23,9 @@ export function LojaConfigForm({ slug, initial }: Props) {
   const [banner, setBanner] = useState(initial.lojaBannerUrl ?? "");
   const [logo, setLogo] = useState(initial.lojaLogoUrl ?? "");
   const [descricao, setDescricao] = useState(initial.lojaDescricao ?? "");
+  const [pedidoMinimo, setPedidoMinimo] = useState(
+    initial.lojaPedidoMinimo != null ? String(initial.lojaPedidoMinimo) : "0"
+  );
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -66,6 +70,7 @@ export function LojaConfigForm({ slug, initial }: Props) {
         lojaBannerUrl: banner || undefined,
         lojaLogoUrl: logo || undefined,
         lojaDescricao: descricao || undefined,
+        lojaPedidoMinimo: parseFloat(pedidoMinimo) || 0,
       }),
     });
 
@@ -156,6 +161,32 @@ export function LojaConfigForm({ slug, initial }: Props) {
             placeholder="Ex: Produtos fresquinhos, entregues todo dia!"
             maxLength={200}
           />
+        </div>
+
+        {/* Pedido mínimo */}
+        <div className="space-y-1.5">
+          <Label htmlFor="pedido-minimo" className="flex items-center gap-1.5">
+            <ShoppingBag className="h-3.5 w-3.5 text-blue-700" />
+            Valor mínimo de pedido (R$)
+          </Label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-500">R$</span>
+            <Input
+              id="pedido-minimo"
+              type="number"
+              min="0"
+              step="0.01"
+              value={pedidoMinimo}
+              onChange={(e) => setPedidoMinimo(e.target.value)}
+              placeholder="0,00"
+              className="w-36"
+            />
+            <p className="text-xs text-gray-400">
+              {parseFloat(pedidoMinimo) > 0
+                ? `Clientes precisarão de no mínimo ${Number(pedidoMinimo).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} para finalizar o pedido`
+                : "Sem mínimo — qualquer valor é aceito"}
+            </p>
+          </div>
         </div>
 
         {/* Banner */}

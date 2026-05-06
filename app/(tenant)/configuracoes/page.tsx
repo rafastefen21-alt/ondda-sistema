@@ -197,10 +197,11 @@ export default async function ConfiguracoesPage() {
         <LojaConfigForm
           slug={tenant.slug}
           initial={{
-            lojaCorPrimaria: tenant.lojaCorPrimaria,
-            lojaBannerUrl: tenant.lojaBannerUrl,
-            lojaLogoUrl: tenant.lojaLogoUrl,
-            lojaDescricao: tenant.lojaDescricao,
+            lojaCorPrimaria:  tenant.lojaCorPrimaria,
+            lojaBannerUrl:    tenant.lojaBannerUrl,
+            lojaLogoUrl:      tenant.lojaLogoUrl,
+            lojaDescricao:    tenant.lojaDescricao,
+            lojaPedidoMinimo: tenant.lojaPedidoMinimo ? Number(tenant.lojaPedidoMinimo) : null,
           }}
         />
       )}

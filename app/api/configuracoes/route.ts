@@ -5,10 +5,11 @@ import { z } from "zod";
 
 const schema = z.object({
   // Loja customization
-  lojaCorPrimaria: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  lojaBannerUrl:   z.string().url().optional().or(z.literal("")),
-  lojaLogoUrl:     z.string().url().optional().or(z.literal("")),
-  lojaDescricao:   z.string().max(200).optional(),
+  lojaCorPrimaria:  z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  lojaBannerUrl:    z.string().url().optional().or(z.literal("")),
+  lojaLogoUrl:      z.string().url().optional().or(z.literal("")),
+  lojaDescricao:    z.string().max(200).optional(),
+  lojaPedidoMinimo: z.number().min(0).optional().nullable(),
   // Integrações
   mpPublicKey:     z.string().optional().nullable(),
   mpAccessToken:   z.string().optional().nullable(),
@@ -52,10 +53,11 @@ export async function PATCH(req: NextRequest) {
     where: { id: session.user.tenantId },
     data: {
       // loja
-      ...(d.lojaCorPrimaria !== undefined ? { lojaCorPrimaria: d.lojaCorPrimaria } : {}),
-      ...(d.lojaBannerUrl   !== undefined ? { lojaBannerUrl:   d.lojaBannerUrl || null } : {}),
-      ...(d.lojaLogoUrl     !== undefined ? { lojaLogoUrl:     d.lojaLogoUrl   || null } : {}),
-      ...(d.lojaDescricao   !== undefined ? { lojaDescricao:   d.lojaDescricao } : {}),
+      ...(d.lojaCorPrimaria  !== undefined ? { lojaCorPrimaria:  d.lojaCorPrimaria } : {}),
+      ...(d.lojaBannerUrl    !== undefined ? { lojaBannerUrl:    d.lojaBannerUrl || null } : {}),
+      ...(d.lojaLogoUrl      !== undefined ? { lojaLogoUrl:      d.lojaLogoUrl   || null } : {}),
+      ...(d.lojaDescricao    !== undefined ? { lojaDescricao:    d.lojaDescricao } : {}),
+      ...(d.lojaPedidoMinimo !== undefined ? { lojaPedidoMinimo: d.lojaPedidoMinimo ?? 0 } : {}),
       // integrações
       ...(d.mpPublicKey     !== undefined ? { mpPublicKey:     d.mpPublicKey   || null } : {}),
       ...(d.mpAccessToken   !== undefined ? { mpAccessToken:   d.mpAccessToken || null } : {}),

@@ -76,6 +76,7 @@ interface TenantInfo {
   bannerUrl: string | null;
   logoUrl: string | null;
   descricao: string | null;
+  pedidoMinimo: number;
 }
 
 export function LojaClient({
@@ -104,6 +105,7 @@ export function LojaClient({
   const cartItems = Object.values(cart);
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cartItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  const belowMinimo = tenant.pedidoMinimo > 0 && cartTotal < tenant.pedidoMinimo;
 
   const filtered = products.filter((p) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
@@ -401,13 +403,22 @@ export function LojaClient({
                   />
                 </div>
 
+                {belowMinimo && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    <p className="font-medium">Pedido mínimo não atingido</p>
+                    <p className="text-xs mt-0.5">
+                      Mínimo: <strong>{fmtPrice(tenant.pedidoMinimo)}</strong> · Atual: <strong>{fmtPrice(cartTotal)}</strong> · Faltam <strong>{fmtPrice(tenant.pedidoMinimo - cartTotal)}</strong>
+                    </p>
+                  </div>
+                )}
+
                 {error && (
                   <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
                     {error}
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={loading || cartItems.length === 0}>
+                <Button type="submit" className="w-full" disabled={loading || cartItems.length === 0 || belowMinimo}>
                   <Send className="h-4 w-4" />
                   {loading ? "Enviando..." : "Enviar Pedido"}
                 </Button>
@@ -453,16 +464,23 @@ export function LojaClient({
             </div>
 
             {cartCount > 0 && (
-              <button
-                onClick={() => setStep("checkout")}
-                className="relative flex items-center gap-2 rounded-lg bg-blue-800 px-4 py-2 text-sm font-medium text-white hover:bg-blue-900"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                <span>{cartCount} iten(s)</span>
-                <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-xs text-white">
-                  {cartItems.length}
-                </span>
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={() => setStep("checkout")}
+                  className="relative flex items-center gap-2 rounded-lg bg-blue-800 px-4 py-2 text-sm font-medium text-white hover:bg-blue-900"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  <span>{fmtPrice(cartTotal)}</span>
+                  <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-xs text-white">
+                    {cartItems.length}
+                  </span>
+                </button>
+                {belowMinimo && (
+                  <p className="text-xs font-medium text-amber-700">
+                    Mín. {fmtPrice(tenant.pedidoMinimo)} · faltam {fmtPrice(tenant.pedidoMinimo - cartTotal)}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
