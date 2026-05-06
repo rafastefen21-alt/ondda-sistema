@@ -283,7 +283,10 @@ function mapFocusStatus(status?: string) {
   switch (status) {
     case "autorizado":    return "EMITIDA"     as const;
     case "cancelado":     return "CANCELADA"   as const;
-    case "erro":          return "ERRO"        as const;
+    case "erro":
+    case "rejeitado":     // SEFAZ rejeitou a NF-e (ex: erro 1002)
+    case "denegado":      // SEFAZ denegou (ex: emitente irregular)
+      return "ERRO" as const;
     default:              return "PROCESSANDO" as const;
   }
 }
