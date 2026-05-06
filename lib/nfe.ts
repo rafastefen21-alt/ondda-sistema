@@ -130,116 +130,136 @@ export function validateNfeReady(order: NfeOrder, tenant: NfeTenant): NfeValidat
 // ─── Builder do payload ───────────────────────────────────────────────────────
 
 /**
- * Monta o JSON completo para envio à API Focus NF-e.
+ * Monta o JSON para a API Focus NF-e v2 no formato FLAT (sem objetos aninhados).
+ * Todos os campos do emitente levam sufixo _emitente; do destinatário, _destinatario.
  *
- * Premissas (ajuste conforme necessário):
- *  - CSOSN 400: não tributado pelo ICMS (Simples Nacional sem substituição)
- *  - PIS/COFINS CST 07: operação isenta
- *  - local_destino 1 (interna) — detectado automaticamente se estados forem iguais
- *  - consumidor_final: 0 se cliente tem CNPJ, 1 se pessoa física
+ * Referência: https://focusnfe.com.br/doc/#nfe-campos
  *
- * TODO: revisar CSTs e alíquotas com seu contador antes de ir para produção.
+ * Premissas:
+ *  - CSOSN 400 para Simples Nacional (não tributado / sem ST)
+ *  - PIS/COFINS CST 07 (operação isenta)
+ *  - local_destino detectado automaticamente (interna ou interestadual)
  */
 export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<string, unknown> {
-  const now    = new Date().toISOString().replace("Z", "-03:00");
-  const regime = parseInt(tenant.regimeTributario ?? "1", 10);
-  const isSimples = regime === 1 || regime === 2;
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const regime     = parseInt(tenant.regimeTributario ?? "1", 10);
+  const isSimples  = regime === 1 || regime === 2;
+  const c          = order.client;
 
-  // ── Emitente ──────────────────────────────────────────────────────────────
-  const emitente: Record<string, unknown> = {
-    cnpj:               digits(tenant.cnpj ?? ""),
-    nome:               tenant.name,
-    logradouro:         tenant.logradouro ?? "",
-    numero:             tenant.numero ?? "",
-    bairro:             tenant.bairro ?? "",
-    municipio:          tenant.city ?? "",
-    uf:                 tenant.state ?? "",
-    cep:                digits(tenant.cep ?? ""),
-    codigo_municipio:   tenant.codigoCidade ?? "",
-    inscricao_estadual: digits(tenant.ie ?? "") || "ISENTO",
-    cnae_fiscal:        parseInt(digits(tenant.cnae ?? "0"), 10),
-    regime_tributario:  regime,
-  };
-  if (tenant.complemento) emitente.complemento = tenant.complemento;
-  if (tenant.phone)        emitente.telefone    = digits(tenant.phone);
+  // ── Totais ────────────────────────────────────────────────────────────────
+  const valorProdutos = parseFloat(
+    order.items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0).toFixed(2)
+  );
 
-  // ── Destinatário ──────────────────────────────────────────────────────────
-  const c = order.client;
-  const temEndereco = !!(c.cep && c.logradouro && c.bairro && c.city && c.state);
-  const temDocumento = !!(c.cnpj || c.cpf);
-
-  const destinatario: Record<string, unknown> = {
-    nome:  c.name ?? "Consumidor Final",
-    email: c.email,
-  };
-
-  if (c.cnpj) destinatario.cnpj = digits(c.cnpj);
-  else if (c.cpf) destinatario.cpf = digits(c.cpf);
-
-  if (temEndereco) {
-    destinatario.logradouro       = c.logradouro ?? "";
-    destinatario.numero           = c.numero     ?? "S/N";
-    destinatario.bairro           = c.bairro     ?? "";
-    destinatario.municipio        = c.city        ?? "";
-    destinatario.uf               = c.state       ?? "";
-    destinatario.cep              = digits(c.cep ?? "");
-    destinatario.codigo_municipio = c.codigoCidade ?? "";
-  }
-
-  // ── Itens ─────────────────────────────────────────────────────────────────
-  // Detecta operação interna ou interestadual automaticamente
+  // ── Destino (interna ou interestadual) ────────────────────────────────────
   const localDestino = (tenant.state && c.state && tenant.state !== c.state) ? 2 : 1;
 
-  const itens = order.items.map((item, idx) => {
+  // ── Itens ─────────────────────────────────────────────────────────────────
+  const items = order.items.map((item, idx) => {
     const qty   = Number(item.quantity);
     const price = Number(item.unitPrice);
-    const cfop  = item.product.cfop
-      ?? (localDestino === 2 ? "6102" : "5102"); // interestadual → 6102
+    const cfop  = parseInt(item.product.cfop ?? (localDestino === 2 ? "6102" : "5102"), 10);
+    const ncm   = parseInt(digits(item.product.ncm ?? "0"), 10);
 
     const entry: Record<string, unknown> = {
-      numero_item:              idx + 1,
-      codigo_produto:           item.product.id.slice(-12).toUpperCase(),
-      descricao:                item.product.name,
-      codigo_ncm:               digits(item.product.ncm ?? ""),
+      numero_item:               idx + 1,
+      codigo_produto:            item.product.id.slice(-12).toUpperCase(),
+      descricao:                 item.product.name,
+      codigo_ncm:                ncm,
       cfop,
-      unidade_comercial:        item.product.unit,
-      quantidade_comercial:     qty,
-      valor_unitario_comercial: price,
-      valor_bruto:              parseFloat((qty * price).toFixed(2)),
-      // ICMS
-      icms_origem: 0, // 0 = nacional
-      // TODO: revisar CSOSN/CST com seu contador
-      ...(isSimples
-        ? { icms_csosn: "400" }                                    // Simples Nacional — não tributado
-        : { icms_situacao_tributaria: "41", icms_aliquota: 0 }),   // Regime Normal — isento
-      // PIS / COFINS
-      // TODO: ajustar CSTs conforme apuração
-      pis_situacao_tributaria:    "07",  // isento
-      cofins_situacao_tributaria: "07",  // isento
+      unidade_comercial:         item.product.unit,
+      quantidade_comercial:      qty,
+      valor_unitario_comercial:  price,
+      valor_unitario_tributavel: price,
+      unidade_tributavel:        item.product.unit,
+      quantidade_tributavel:     qty,
+      valor_bruto:               parseFloat((qty * price).toFixed(2)),
+      icms_origem:               0,   // 0 = nacional
+      pis_situacao_tributaria:   "07",
+      cofins_situacao_tributaria:"07",
     };
+
+    if (isSimples) {
+      entry.icms_csosn = "400";           // Simples Nacional — sem tributação/ST
+    } else {
+      entry.icms_situacao_tributaria = 41; // Regime Normal — isento
+    }
+
     return entry;
   });
 
   // ── Pagamentos ────────────────────────────────────────────────────────────
-  const pagamentos = order.payments.map((p) => ({
-    forma_pagamento: PAYMENT_CODE[p.method] ?? "99",
-    valor_pagamento: parseFloat(Number(p.amount).toFixed(2)),
-  }));
+  const formasPagamento = order.payments.length > 0
+    ? order.payments.map((p) => ({
+        forma_pagamento: PAYMENT_CODE[p.method] ?? "99",
+        valor_pagamento: parseFloat(Number(p.amount).toFixed(2)),
+      }))
+    : [{ forma_pagamento: "99", valor_pagamento: valorProdutos }]; // sem cobrança cadastrada
 
-  // ── Payload final ─────────────────────────────────────────────────────────
-  return {
+  // ── Payload flat (sem objetos emitente/destinatario aninhados) ─────────────
+  const payload: Record<string, unknown> = {
+    // Cabeçalho
     natureza_operacao:  "Venda de mercadoria",
-    data_emissao:       now,
-    tipo_documento:     1,            // 1 = saída
-    local_destino:      localDestino, // 1 = interna | 2 = interestadual
-    finalidade_emissao: 1,            // 1 = normal
-    consumidor_final:   temDocumento && c.cnpj ? 0 : 1, // 0 = B2B, 1 = B2C
-    presenca_comprador: 2,            // 2 = não presencial (internet/sistema)
-    emitente,
-    destinatario,
-    itens,
-    pagamentos,
+    data_emissao:       today,
+    tipo_documento:     1,             // 1 = saída
+    local_destino:      localDestino,  // 1 = interna | 2 = interestadual
+    finalidade_emissao: 1,             // 1 = NF-e normal
+    consumidor_final:   c.cnpj ? 0 : 1,
+    presenca_comprador: 2,             // 2 = não presencial
+
+    // Emitente — campos na raiz com sufixo _emitente
+    cnpj_emitente:                digits(tenant.cnpj ?? ""),
+    nome_emitente:                tenant.name,
+    logradouro_emitente:          tenant.logradouro ?? "",
+    numero_emitente:              tenant.numero ?? "S/N",
+    bairro_emitente:              tenant.bairro ?? "",
+    municipio_emitente:           tenant.city ?? "",
+    uf_emitente:                  tenant.state ?? "",
+    cep_emitente:                 digits(tenant.cep ?? ""),
+    inscricao_estadual_emitente:  digits(tenant.ie ?? "") || "ISENTO",
+    regime_tributario:            regime,
+
+    // Destinatário — campos na raiz com sufixo _destinatario
+    nome_destinatario:                    c.name ?? "Consumidor Final",
+    email_destinatario:                   c.email,
+    inscricao_estadual_destinatario:      null,
+
+    // Totais
+    valor_produtos:   valorProdutos,
+    valor_total:      valorProdutos,
+    valor_frete:      0,
+    valor_seguro:     0,
+    valor_desconto:   0,
+    modalidade_frete: 9, // 9 = sem frete
+
+    // Itens e pagamentos
+    items,
+    formas_pagamento: formasPagamento,
   };
+
+  // Campos opcionais do emitente
+  if (tenant.complemento)  payload.complemento_emitente  = tenant.complemento;
+  if (tenant.phone)        payload.telefone_emitente     = digits(tenant.phone);
+  if (tenant.codigoCidade) payload.codigo_municipio_emitente = tenant.codigoCidade;
+  if (tenant.cnae)         payload.cnae_fiscal_emitente  = parseInt(digits(tenant.cnae), 10);
+
+  // Documento do destinatário
+  if (c.cnpj)      payload.cnpj_destinatario = digits(c.cnpj);
+  else if (c.cpf)  payload.cpf_destinatario  = digits(c.cpf);
+
+  // Endereço do destinatário (se cadastrado)
+  if (c.cep && c.logradouro && c.bairro && c.city && c.state) {
+    payload.logradouro_destinatario  = c.logradouro;
+    payload.numero_destinatario      = c.numero ?? "S/N";
+    payload.bairro_destinatario      = c.bairro;
+    payload.municipio_destinatario   = c.city;
+    payload.uf_destinatario          = c.state;
+    payload.cep_destinatario         = digits(c.cep);
+    payload.pais_destinatario        = "Brasil";
+    if (c.codigoCidade) payload.codigo_municipio_destinatario = c.codigoCidade;
+  }
+
+  return payload;
 }
 
 // ─── Chamadas à API Focus NF-e ────────────────────────────────────────────────

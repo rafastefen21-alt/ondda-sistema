@@ -143,14 +143,14 @@ export async function POST(
   const ambiente = tenant.nfeAmbiente ?? "homologacao";
 
   // Log de diagnóstico (visível em Vercel → Logs)
-  const emitenteData = (payload as { emitente?: { cnpj?: string; inscricao_estadual?: string } }).emitente;
+  const p = payload as Record<string, unknown>;
   console.log("[NFE-EMIT] tentando emitir", {
     ref,
     ambiente,
-    tokenPrefix: tenant.focusNfeToken.slice(0, 8) + "…",
-    tokenLength: tenant.focusNfeToken.length,
-    cnpjEmitente: emitenteData?.cnpj,
-    ieEmitente:   emitenteData?.inscricao_estadual,
+    tokenPrefix:     tenant.focusNfeToken.slice(0, 8) + "…",
+    tokenLength:     tenant.focusNfeToken.length,
+    cnpjEmitente:    p.cnpj_emitente,
+    ieEmitente:      p.inscricao_estadual_emitente,
     tenantCnpjBruto: tenant.cnpj,
   });
   // Log do payload completo para suporte Focus NF-e (remover após resolver)
@@ -181,8 +181,8 @@ export async function POST(
         details: focusData,
         debug: {
           ambiente,
-          cnpjEnviado: emitenteData?.cnpj,
-          ieEnviada:   emitenteData?.inscricao_estadual,
+          cnpjEnviado: p.cnpj_emitente,
+          ieEnviada:   p.inscricao_estadual_emitente,
           tokenPrefix: tenant.focusNfeToken.slice(0, 8) + "…",
         },
       },
