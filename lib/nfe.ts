@@ -240,7 +240,7 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
   // Campos opcionais do emitente
   if (tenant.complemento)  payload.complemento_emitente  = tenant.complemento;
   if (tenant.phone)        payload.telefone_emitente     = digits(tenant.phone);
-  if (tenant.cnae)         payload.cnae_fiscal_emitente  = parseInt(digits(tenant.cnae), 10);
+  if (tenant.cnae)         payload.cnae_fiscal           = parseInt(digits(tenant.cnae), 10); // sem sufixo _emitente
   // Código IBGE: só envia se for realmente um código de 7 dígitos (não nome da cidade)
   const ibgeEmitente = normIbge(tenant.codigoCidade);
   if (ibgeEmitente)        payload.codigo_municipio_emitente = ibgeEmitente;
