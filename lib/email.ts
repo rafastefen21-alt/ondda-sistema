@@ -1,6 +1,11 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy — só instancia quando a função for chamada (evita erro de build sem a env)
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 
 const FROM = process.env.EMAIL_FROM ?? "noreply@ondda.com.br";
 
@@ -213,7 +218,7 @@ export async function sendOrderStatusEmail(
   const shortId     = data.orderId.slice(-8).toUpperCase();
 
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from:    FROM,
       to:      validRecipients,
       subject: `Pedido #${shortId} — ${statusLabel} | ${data.tenantName}`,

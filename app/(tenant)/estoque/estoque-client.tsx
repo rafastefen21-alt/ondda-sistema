@@ -11,9 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getStockStatus, type StockStatus } from "@/lib/stock";
-
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+// Inlined here to avoid pulling lib/stock.ts (imports Prisma) into a client bundle
+type StockStatus = "OK" | "ALERTA" | "CRITICO";
+function getStockStatus(quantity: number, alertThreshold: number | null): StockStatus {
+  if (quantity <= 0) return "CRITICO";
+  if (alertThreshold !== null && quantity <= alertThreshold) return "ALERTA";
+  return "OK";
+}
 
 interface Movement {
   id: string;
