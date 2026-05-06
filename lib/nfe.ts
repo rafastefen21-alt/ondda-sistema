@@ -159,13 +159,14 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
     const qty   = Number(item.quantity);
     const price = Number(item.unitPrice);
     const cfop  = parseInt(item.product.cfop ?? (localDestino === 2 ? "6102" : "5102"), 10);
-    const ncm   = parseInt(digits(item.product.ncm ?? "0"), 10);
+    // NCM como string com 8 dígitos — Focus NF-e espera character(8)
+    const ncmStr = digits(item.product.ncm ?? "0").padStart(8, "0").slice(-8);
 
     const entry: Record<string, unknown> = {
       numero_item:               idx + 1,
       codigo_produto:            item.product.id.slice(-12).toUpperCase(),
       descricao:                 item.product.name,
-      codigo_ncm:                ncm,
+      codigo_ncm:                ncmStr,
       cfop,
       unidade_comercial:         item.product.unit,
       quantidade_comercial:      qty,
@@ -180,9 +181,15 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
     };
 
     if (isSimples) {
-      entry.icms_csosn = "400";           // Simples Nacional — sem tributação/ST
+      // CSOSN 102 — Tributado pelo Simples Nacional sem permissão de crédito
+      // Mais robusto que 400; gera <ICMSSN102> reconhecido por todos os SEFAZ
+      entry.icms_csosn = "102";
     } else {
-      entry.icms_situacao_tributaria = 41; // Regime Normal — isento
+      // Regime Normal — isento (CST 41)
+      entry.icms_situacao_tributaria = "41";
+      entry.icms_base_calculo        = 0;
+      entry.icms_aliquota            = 0;
+      entry.icms_valor               = 0;
     }
 
     return entry;
