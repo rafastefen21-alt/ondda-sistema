@@ -180,12 +180,17 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
       cofins_situacao_tributaria:"07",
     };
 
+    // Focus NF-e usa `icms_situacao_tributaria` para TODOS os regimes:
+    //  - Simples Nacional → valor é o CSOSN (ex: "102", "400", "500")
+    //  - Regime Normal    → valor é o CST   (ex: "41" = isento)
+    // O campo `icms_csosn` NÃO existe na API; Focus identifica o regime pelo CRT.
     if (isSimples) {
-      // CSOSN 102 — Tributado pelo Simples Nacional sem permissão de crédito
-      // Mais robusto que 400; gera <ICMSSN102> reconhecido por todos os SEFAZ
-      entry.icms_csosn = "102";
+      // CSOSN 102 — Simples Nacional sem permissão de crédito (sem ST)
+      // Gera <ICMSSN102><orig>0</orig><CSOSN>102</CSOSN></ICMSSN102>
+      entry.icms_situacao_tributaria = "102";
     } else {
-      // Regime Normal — isento (CST 41)
+      // CST 41 — Regime Normal, operação isenta
+      // Gera <ICMS40><orig>0</orig><CST>41</CST></ICMS40>
       entry.icms_situacao_tributaria = "41";
       entry.icms_base_calculo        = 0;
       entry.icms_aliquota            = 0;
