@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle,
@@ -274,13 +274,44 @@ export function OrderDetailClient({
     }
   }
 
-  const [emittingNfe, setEmittingNfe] = useState(false);
-  const [nfeError,    setNfeError]    = useState<{
+  const [emittingNfe,   setEmittingNfe]   = useState(false);
+  const [refreshingNfe, setRefreshingNfe] = useState(false);
+  const [nfeError,      setNfeError]      = useState<{
     message: string;
     missing?: string[];
     details?: unknown;
     debug?: { ambiente?: string; cnpjEnviado?: string; ieEnviada?: string; tokenPrefix?: string };
   } | null>(null);
+
+  // Auto-polling enquanto há NF-e em PROCESSANDO
+  const hasProcessingInvoice = order.invoices.some((inv) => inv.status === "PROCESSANDO");
+
+  useEffect(() => {
+    if (!hasProcessingInvoice) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pedidos/${order.id}/emitir-nfe`);
+        if (res.ok) router.refresh();
+      } catch {
+        // ignora erro de rede — tenta novamente no próximo ciclo
+      }
+    }, 8000);
+
+    return () => clearInterval(intervalId);
+  }, [hasProcessingInvoice, order.id, router]);
+
+  async function refreshNfeStatus() {
+    setRefreshingNfe(true);
+    try {
+      const res = await fetch(`/api/pedidos/${order.id}/emitir-nfe`);
+      if (res.ok) router.refresh();
+    } catch {
+      // silencia
+    } finally {
+      setRefreshingNfe(false);
+    }
+  }
 
   // Cancelamento de NF-e
   const [cancellingId,   setCancellingId]   = useState<string | null>(null); // invoiceId em cancelamento
@@ -950,6 +981,17 @@ export function OrderDetailClient({
 
                         {/* Ações */}
                         <div className="flex shrink-0 items-center gap-1.5">
+                          {inv.status === "PROCESSANDO" && (
+                            <button
+                              onClick={refreshNfeStatus}
+                              disabled={refreshingNfe}
+                              title="Consultar status atualizado na SEFAZ"
+                              className="flex items-center gap-1 rounded border border-yellow-200 bg-white px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-50 disabled:opacity-50"
+                            >
+                              <RefreshCw className={`h-3 w-3 ${refreshingNfe ? "animate-spin" : ""}`} />
+                              {refreshingNfe ? "..." : "Atualizar"}
+                            </button>
+                          )}
                           {inv.pdfUrl && (
                             <a
                               href={inv.pdfUrl}
