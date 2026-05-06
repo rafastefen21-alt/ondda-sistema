@@ -20,6 +20,7 @@ import {
   Store,
   ChevronDown,
   HelpCircle,
+  Warehouse,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,12 @@ const navItems: NavItem[] = [
     href: "/clientes",
     label: "Clientes",
     icon: Users,
+    roles: ["TENANT_ADMIN", "GERENTE"],
+  },
+  {
+    href: "/estoque",
+    label: "Estoque",
+    icon: Warehouse,
     roles: ["TENANT_ADMIN", "GERENTE"],
   },
   {

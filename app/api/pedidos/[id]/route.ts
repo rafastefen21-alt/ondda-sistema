@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { OrderStatus } from "@/app/generated/prisma/client";
 import { sendOrderStatusEmail } from "@/lib/email";
+import { deductStockForOrder } from "@/lib/stock";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -175,6 +176,10 @@ export async function PATCH(
       if (parsed.data.scheduledDeliveryDate) {
         updateData.scheduledDeliveryDate = new Date(parsed.data.scheduledDeliveryDate);
       }
+      // Desconta estoque automaticamente ao aprovar
+      deductStockForOrder(session.user.tenantId, id).catch((err) =>
+        console.error("[STOCK] erro ao descontar estoque:", err),
+      );
     }
     if (newStatus === "ENTREGUE") updateData.deliveredAt = new Date();
     if (newStatus === "CANCELADO") updateData.cancelledAt = new Date();
