@@ -210,7 +210,48 @@ export function OrderDetailClient({
     }
   }
 
-  const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+  const [markingPaid,    setMarkingPaid]    = useState<string | null>(null);
+  const [showManualPay,  setShowManualPay]  = useState(false);
+  const [manualMethod,   setManualMethod]   = useState("PIX");
+  const [registeringPay, setRegisteringPay] = useState(false);
+
+  /** Cria um pagamento manual já marcado como PAGO */
+  async function registerAsPaid() {
+    setRegisteringPay(true);
+    try {
+      // 1. Cria o registro de pagamento
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch("/api/pagamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId:      order.id,
+          amount:       total,
+          method:       manualMethod,
+          installments: 1,
+          dueDate:      today,
+        }),
+      });
+      const payments = await res.json();
+      if (!res.ok) { alert(payments.error ?? "Erro ao registrar pagamento."); return; }
+
+      // 2. Imediatamente marca como PAGO
+      const paymentId = Array.isArray(payments) ? payments[0]?.id : payments?.id;
+      if (paymentId) {
+        await fetch(`/api/pagamentos/${paymentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "PAGO" }),
+        });
+      }
+      setShowManualPay(false);
+      router.refresh();
+    } catch {
+      alert("Erro de conexão.");
+    } finally {
+      setRegisteringPay(false);
+    }
+  }
 
   async function markAsPaid(paymentId: string) {
     setMarkingPaid(paymentId);
@@ -667,24 +708,65 @@ export function OrderDetailClient({
                   {canUseMp && !["CANCELADO", "RASCUNHO"].includes(order.status) ? (
                     <div className="space-y-3">
                       <p className="text-sm text-gray-500">
-                        Nenhuma cobrança registrada. Gere o link de pagamento para o cliente.
+                        Nenhuma cobrança registrada.
                       </p>
+
+                      {/* Forma de pagamento compartilhada */}
                       <div className="space-y-1.5">
                         <label className="text-xs font-medium text-gray-600">
                           Forma de pagamento
                         </label>
                         <select
                           value={chargeMethod}
-                          onChange={(e) => setChargeMethod(e.target.value)}
+                          onChange={(e) => { setChargeMethod(e.target.value); setManualMethod(e.target.value); }}
                           className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-1"
                         >
                           {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
+                            <option key={value} value={value}>{label}</option>
                           ))}
                         </select>
                       </div>
+
+                      {/* Botão: Registrar como Pago */}
+                      <button
+                        onClick={() => setShowManualPay(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-100"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Registrar como Pago ({formatCurrency(total)})
+                      </button>
+
+                      {/* Confirmação inline */}
+                      {showManualPay && (
+                        <div className="rounded-xl border border-green-200 bg-green-50 p-3 space-y-2">
+                          <p className="text-sm font-semibold text-green-800">
+                            Confirmar pagamento manual?
+                          </p>
+                          <p className="text-xs text-green-700">
+                            Será registrado <strong>{formatCurrency(total)}</strong> via <strong>{PAYMENT_METHOD_LABELS[chargeMethod] ?? chargeMethod}</strong> com data de hoje.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={registerAsPaid}
+                              disabled={registeringPay}
+                              className="flex items-center gap-1.5 rounded-lg bg-green-700 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+                            >
+                              {registeringPay
+                                ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                : <CheckCircle className="h-3.5 w-3.5" />}
+                              {registeringPay ? "Registrando..." : "Confirmar"}
+                            </button>
+                            <button
+                              onClick={() => setShowManualPay(false)}
+                              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Botão: Cobrar via MP */}
                       <button
                         onClick={generateCharge}
                         disabled={generatingCharge}
