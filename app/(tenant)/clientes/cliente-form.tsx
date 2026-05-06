@@ -335,9 +335,14 @@ export function ClienteForm({
                     }
                   />
                   {cepLoading && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">...</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">buscando...</span>
                   )}
                 </div>
+                {cep && cep.replace(/\D/g, "").length !== 8 ? (
+                  <p className="text-xs text-red-500">CEP deve ter 8 dígitos (ex: 03342-000)</p>
+                ) : (
+                  <p className="text-xs text-gray-400">Preenchimento automático.</p>
+                )}
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="logradouro">Logradouro</Label>
