@@ -3,7 +3,8 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import {
-  List, Columns, ShoppingCart, ArrowRight, Plus
+  List, Columns, ShoppingCart, ArrowRight, Plus,
+  Upload, Download, CheckCircle2, AlertTriangle, X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatCurrency, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, canSeePrice } from "@/lib/utils";
@@ -82,7 +83,45 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
   const dragOrderId = useRef<string | null>(null);
   const dragFromStatus = useRef<OrderStatus | null>(null);
 
+  // CSV import state
+  const [csvPanel, setCsvPanel]   = useState(false);
+  const [csvLoading, setCsvLoading] = useState(false);
+  const [csvResult, setCsvResult] = useState<{
+    ordersCreated: number; rowErrors: number; skipped: number;
+    created: { orderId: string; clientName: string; itemCount: number }[];
+    errors: string[];
+  } | null>(null);
+  const [csvError, setCsvError]   = useState("");
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   const canAdvance = CAN_ADVANCE.includes(role);
+
+  // ── CSV Import ──────────────────────────────────────────────────────────────
+
+  async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvLoading(true);
+    setCsvError("");
+    setCsvResult(null);
+
+    const fd = new FormData();
+    fd.append("csv", file);
+
+    const res = await fetch("/api/pedidos/importar-csv", { method: "POST", body: fd });
+    const data = await res.json();
+    setCsvLoading(false);
+
+    if (!res.ok) { setCsvError(data.error ?? "Erro ao importar CSV."); return; }
+    setCsvResult(data);
+    // Reload orders list
+    const listRes = await fetch("/api/pedidos");
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      if (Array.isArray(listData)) setOrders(listData);
+    }
+    if (csvInputRef.current) csvInputRef.current.value = "";
+  }
 
   // ── Move order ──────────────────────────────────────────────────────────────
 
@@ -173,6 +212,15 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
               Novo Pedido
             </Link>
           )}
+          {!isClient && canAdvance && (
+            <button
+              onClick={() => { setCsvPanel(!csvPanel); setCsvResult(null); setCsvError(""); }}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <Upload className="h-4 w-4" />
+              Importar CSV
+            </button>
+          )}
           {/* View toggle */}
           <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
             <button
@@ -200,6 +248,100 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── CSV Import Panel ──────────────────────────────────────────────── */}
+      {csvPanel && !isClient && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Importar pedidos via CSV</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Crie vários pedidos de uma vez. Baixe o modelo com dados reais da sua conta.
+              </p>
+            </div>
+            <button onClick={() => setCsvPanel(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Format hint */}
+          <div className="rounded-lg bg-white border border-gray-200 p-3 text-xs font-mono text-gray-600 overflow-x-auto">
+            <p className="text-gray-400 mb-1">Formato (separador ponto-e-vírgula):</p>
+            <p className="text-blue-700 font-semibold">email_cliente;produto;quantidade;observacoes</p>
+            <p>cliente@padaria.com;Pão Francês;100;Entregar pela manhã</p>
+            <p>cliente@padaria.com;Croissant;50;Entregar pela manhã</p>
+            <p>outro@mercado.com;Pão de Forma;30;</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {/* Download sample */}
+            <a
+              href="/api/pedidos/importar-csv"
+              download="modelo-importacao-pedidos.csv"
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Baixar modelo CSV
+            </a>
+
+            {/* Upload */}
+            <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvImport} />
+            <button
+              onClick={() => csvInputRef.current?.click()}
+              disabled={csvLoading}
+              className="inline-flex items-center gap-2 rounded-md bg-blue-800 px-3 py-2 text-sm font-medium text-white hover:bg-blue-900 disabled:opacity-50"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {csvLoading ? "Importando..." : "Enviar CSV"}
+            </button>
+          </div>
+
+          {/* Error */}
+          {csvError && (
+            <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {csvError}
+            </div>
+          )}
+
+          {/* Result */}
+          {csvResult && (
+            <div className="rounded-lg bg-white border border-gray-200 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                {csvResult.ordersCreated} pedido(s) criado(s)
+                {csvResult.rowErrors > 0 && (
+                  <span className="ml-2 text-amber-600">· {csvResult.rowErrors + csvResult.skipped} problema(s)</span>
+                )}
+              </div>
+              {csvResult.created.length > 0 && (
+                <div className="max-h-32 overflow-auto space-y-1">
+                  {csvResult.created.map((o) => (
+                    <div key={o.orderId} className="flex items-center gap-2 text-xs text-gray-600">
+                      <CheckCircle2 className="h-3 w-3 text-green-400 shrink-0" />
+                      <span className="font-medium">{o.clientName}</span>
+                      <span className="text-gray-400">· {o.itemCount} item(s)</span>
+                      <Link href={`/pedidos/${o.orderId}`} className="ml-auto text-blue-700 hover:underline">
+                        Ver pedido
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {csvResult.errors.length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-amber-600 hover:underline font-medium">
+                    Ver problemas ({csvResult.errors.length})
+                  </summary>
+                  <ul className="mt-1 space-y-0.5 text-gray-500">
+                    {csvResult.errors.map((e, i) => <li key={i}>• {e}</li>)}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── LIST VIEW ──────────────────────────────────────────────────────── */}
       {view === "lista" && (
