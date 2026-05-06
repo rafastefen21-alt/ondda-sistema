@@ -208,14 +208,14 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
     presenca_comprador: 2,             // 2 = não presencial
 
     // Emitente — campos na raiz com sufixo _emitente
-    cnpj_emitente:                digits(tenant.cnpj ?? ""),
-    nome_emitente:                tenant.name,
+    cnpj_emitente:                normCnpj(tenant.cnpj ?? ""),
+    nome_emitente:                tenant.name.trim(),
     logradouro_emitente:          tenant.logradouro ?? "",
     numero_emitente:              tenant.numero ?? "S/N",
     bairro_emitente:              tenant.bairro ?? "",
     municipio_emitente:           tenant.city ?? "",
     uf_emitente:                  tenant.state ?? "",
-    cep_emitente:                 digits(tenant.cep ?? ""),
+    cep_emitente:                 padCep(tenant.cep ?? ""),
     inscricao_estadual_emitente:  digits(tenant.ie ?? "") || "ISENTO",
     regime_tributario:            regime,
 
@@ -240,12 +240,14 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
   // Campos opcionais do emitente
   if (tenant.complemento)  payload.complemento_emitente  = tenant.complemento;
   if (tenant.phone)        payload.telefone_emitente     = digits(tenant.phone);
-  if (tenant.codigoCidade) payload.codigo_municipio_emitente = tenant.codigoCidade;
   if (tenant.cnae)         payload.cnae_fiscal_emitente  = parseInt(digits(tenant.cnae), 10);
+  // Código IBGE: só envia se for realmente um código de 7 dígitos (não nome da cidade)
+  const ibgeEmitente = normIbge(tenant.codigoCidade);
+  if (ibgeEmitente)        payload.codigo_municipio_emitente = ibgeEmitente;
 
-  // Documento do destinatário
-  if (c.cnpj)      payload.cnpj_destinatario = digits(c.cnpj);
-  else if (c.cpf)  payload.cpf_destinatario  = digits(c.cpf);
+  // Documento do destinatário — normaliza tamanho
+  if (c.cnpj)      payload.cnpj_destinatario = normCnpj(c.cnpj);
+  else if (c.cpf)  payload.cpf_destinatario  = normCpf(c.cpf);
 
   // Endereço do destinatário (se cadastrado)
   if (c.cep && c.logradouro && c.bairro && c.city && c.state) {
@@ -254,9 +256,10 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
     payload.bairro_destinatario      = c.bairro;
     payload.municipio_destinatario   = c.city;
     payload.uf_destinatario          = c.state;
-    payload.cep_destinatario         = digits(c.cep);
+    payload.cep_destinatario         = padCep(c.cep ?? "");
     payload.pais_destinatario        = "Brasil";
-    if (c.codigoCidade) payload.codigo_municipio_destinatario = c.codigoCidade;
+    const ibgeDest = normIbge(c.codigoCidade);
+    if (ibgeDest) payload.codigo_municipio_destinatario = ibgeDest;
   }
 
   return payload;
@@ -328,4 +331,38 @@ export function danfeUrl(ref: string, token: string, ambiente: string) {
 /** Remove tudo que não for dígito (máscaras de CNPJ, CPF, CEP, etc.). */
 function digits(value: string): string {
   return value.replace(/\D/g, "");
+}
+
+/**
+ * Normaliza CNPJ para exatamente 14 dígitos.
+ * Se vier com 15 (erro de digitação com zero extra), remove o excesso.
+ */
+function normCnpj(value: string): string {
+  const d = digits(value);
+  if (d.length > 14) return d.slice(-14); // corta da direita (mantém dígitos verificadores)
+  return d;
+}
+
+/**
+ * Normaliza CPF para exatamente 11 dígitos (padding com zero à esquerda se necessário).
+ */
+function normCpf(value: string): string {
+  return digits(value).padStart(11, "0").slice(-11);
+}
+
+/**
+ * Normaliza CEP para exatamente 8 dígitos (padding com zero à esquerda se necessário).
+ */
+function padCep(value: string): string {
+  return digits(value).padStart(8, "0").slice(-8);
+}
+
+/**
+ * Retorna o código IBGE somente se for um número com 7 dígitos.
+ * Rejeita valores que sejam nomes de cidade.
+ */
+function normIbge(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const d = digits(value);
+  return d.length === 7 ? d : null;
 }
