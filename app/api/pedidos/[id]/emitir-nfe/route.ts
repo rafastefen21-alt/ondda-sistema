@@ -153,6 +153,8 @@ export async function POST(
     ieEmitente:   emitenteData?.inscricao_estadual,
     tenantCnpjBruto: tenant.cnpj,
   });
+  // Log do payload completo para suporte Focus NF-e (remover após resolver)
+  console.log("[NFE-EMIT] payload completo", JSON.stringify(payload, null, 2));
 
   const { httpStatus, data: focusData } = await submitNfe(
     ref, payload, tenant.focusNfeToken, ambiente,
