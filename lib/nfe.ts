@@ -113,8 +113,13 @@ export function validateNfeReady(order: NfeOrder, tenant: NfeTenant): NfeValidat
   if (!tenant.codigoCidade)     missing.push("Código IBGE do município da empresa");
 
   // Destinatário
+  const clientLabel = order.client.name ?? order.client.email;
   if (!order.client.cpf && !order.client.cnpj) {
-    missing.push(`CPF ou CNPJ do cliente "${order.client.name ?? order.client.email}"`);
+    missing.push(`CPF ou CNPJ do cliente "${clientLabel}"`);
+  } else if (order.client.cnpj && !isValidCnpj(order.client.cnpj)) {
+    missing.push(`CNPJ do cliente "${clientLabel}" é inválido (dígitos verificadores não conferem) — corrija em Clientes → Editar`);
+  } else if (order.client.cpf && !order.client.cnpj && !isValidCpf(order.client.cpf)) {
+    missing.push(`CPF do cliente "${clientLabel}" é inválido — corrija em Clientes → Editar`);
   }
 
   // Produtos
@@ -343,6 +348,47 @@ export function danfeUrl(ref: string, token: string, ambiente: string) {
 /** Remove tudo que não for dígito (máscaras de CNPJ, CPF, CEP, etc.). */
 function digits(value: string): string {
   return value.replace(/\D/g, "");
+}
+
+/**
+ * Valida CNPJ (algoritmo dos dígitos verificadores).
+ * Exportada para uso nos formulários de cadastro.
+ */
+export function isValidCnpj(raw: string): boolean {
+  const d = digits(raw);
+  if (d.length !== 14) return false;
+  if (/^(\d)\1+$/.test(d)) return false; // todos dígitos iguais (ex: 00000000000000)
+
+  const calc = (base: string, len: number) => {
+    let sum = 0;
+    let pos = len - 7;
+    for (let i = len; i >= 1; i--) {
+      sum += parseInt(base[len - i]) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+
+  return calc(d, 12) === parseInt(d[12]) && calc(d, 13) === parseInt(d[13]);
+}
+
+/**
+ * Valida CPF (algoritmo dos dígitos verificadores).
+ */
+export function isValidCpf(raw: string): boolean {
+  const d = digits(raw);
+  if (d.length !== 11) return false;
+  if (/^(\d)\1+$/.test(d)) return false;
+
+  const calc = (base: string, len: number) => {
+    let sum = 0;
+    for (let i = 0; i < len; i++) sum += parseInt(base[i]) * (len + 1 - i);
+    const r = (sum * 10) % 11;
+    return r === 10 || r === 11 ? 0 : r;
+  };
+
+  return calc(d, 9) === parseInt(d[9]) && calc(d, 10) === parseInt(d[10]);
 }
 
 /**

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isValidCnpj, isValidCpf } from "@/lib/nfe";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",
              "MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC",
@@ -58,6 +59,8 @@ export function ClienteForm({
   const [state,      setState]      = useState(client?.state ?? "");
   const [codigoCidade, setCodigoCidade] = useState(client?.codigoCidade ?? "");
   const [cepLoading, setCepLoading] = useState(false);
+  const [cnpj, setCnpj] = useState(client?.cnpj ?? "");
+  const [cpf,  setCpf]  = useState(client?.cpf  ?? "");
 
   function maskCep(raw: string): string {
     const d = raw.replace(/\D/g, "").slice(0, 8);
@@ -95,8 +98,8 @@ export function ClienteForm({
       name:         fd.get("name"),
       email:        fd.get("email"),
       phone:        fd.get("phone")   || null,
-      cnpj:         fd.get("cnpj")    || null,
-      cpf:          fd.get("cpf")     || null,
+      cnpj:         cnpj || null,
+      cpf:          cpf  || null,
       cep:          cep               || null,
       logradouro:   logradouro        || null,
       numero:       fd.get("numero")  || null,
@@ -309,12 +312,41 @@ export function ClienteForm({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="cnpj">CNPJ</Label>
-                <Input id="cnpj" name="cnpj" defaultValue={client?.cnpj ?? ""} placeholder="00.000.000/0000-00" />
+                <Input
+                  id="cnpj"
+                  value={cnpj}
+                  onChange={(e) => setCnpj(e.target.value)}
+                  placeholder="00.000.000/0000-00"
+                  maxLength={18}
+                  className={
+                    cnpj && !isValidCnpj(cnpj)
+                      ? "border-red-400 focus:ring-red-400"
+                      : ""
+                  }
+                />
+                {cnpj && !isValidCnpj(cnpj) && (
+                  <p className="text-xs text-red-500">CNPJ inválido — verifique os dígitos.</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cpf">CPF</Label>
-                <Input id="cpf" name="cpf" defaultValue={client?.cpf ?? ""} placeholder="000.000.000-00" />
-                <p className="text-xs text-gray-400">Preencha CNPJ ou CPF.</p>
+                <Input
+                  id="cpf"
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  placeholder="000.000.000-00"
+                  maxLength={14}
+                  className={
+                    cpf && !isValidCpf(cpf)
+                      ? "border-red-400 focus:ring-red-400"
+                      : ""
+                  }
+                />
+                {cpf && !isValidCpf(cpf) ? (
+                  <p className="text-xs text-red-500">CPF inválido — verifique os dígitos.</p>
+                ) : (
+                  <p className="text-xs text-gray-400">Preencha CNPJ ou CPF.</p>
+                )}
               </div>
             </div>
 
