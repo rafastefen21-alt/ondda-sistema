@@ -313,6 +313,28 @@ export function OrderDetailClient({
     }
   }
 
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  async function resetNfeToError(invoiceId: string) {
+    setResettingId(invoiceId);
+    try {
+      const res = await fetch(`/api/pedidos/${order.id}/emitir-nfe`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId }),
+      });
+      if (res.ok) router.refresh();
+      else {
+        const err = await res.json();
+        alert(err.error ?? "Erro ao resetar NF-e.");
+      }
+    } catch {
+      alert("Erro de conexão.");
+    } finally {
+      setResettingId(null);
+    }
+  }
+
   // Cancelamento de NF-e
   const [cancellingId,   setCancellingId]   = useState<string | null>(null); // invoiceId em cancelamento
   const [cancelJust,     setCancelJust]     = useState("");
@@ -982,15 +1004,28 @@ export function OrderDetailClient({
                         {/* Ações */}
                         <div className="flex shrink-0 items-center gap-1.5">
                           {inv.status === "PROCESSANDO" && (
-                            <button
-                              onClick={refreshNfeStatus}
-                              disabled={refreshingNfe}
-                              title="Consultar status atualizado na SEFAZ"
-                              className="flex items-center gap-1 rounded border border-yellow-200 bg-white px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-50 disabled:opacity-50"
-                            >
-                              <RefreshCw className={`h-3 w-3 ${refreshingNfe ? "animate-spin" : ""}`} />
-                              {refreshingNfe ? "..." : "Atualizar"}
-                            </button>
+                            <>
+                              <button
+                                onClick={refreshNfeStatus}
+                                disabled={refreshingNfe || !!resettingId}
+                                title="Consultar status atualizado na SEFAZ"
+                                className="flex items-center gap-1 rounded border border-yellow-200 bg-white px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-50 disabled:opacity-50"
+                              >
+                                <RefreshCw className={`h-3 w-3 ${refreshingNfe ? "animate-spin" : ""}`} />
+                                {refreshingNfe ? "..." : "Atualizar"}
+                              </button>
+                              <button
+                                onClick={() => resetNfeToError(inv.id)}
+                                disabled={!!resettingId || refreshingNfe}
+                                title="Marcar como erro para permitir nova emissão"
+                                className="flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                {resettingId === inv.id
+                                  ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-400 border-t-transparent" />
+                                  : <XCircle className="h-3 w-3" />}
+                                {resettingId === inv.id ? "..." : "Resetar"}
+                              </button>
+                            </>
                           )}
                           {inv.pdfUrl && (
                             <a

@@ -245,15 +245,26 @@ export async function GET(
     invoices
       .filter((inv) => inv.status === "PROCESSANDO" && inv.focusNfeRef)
       .map(async (inv) => {
-        const { data } = await checkNfeStatus(
+        const { httpStatus, data } = await checkNfeStatus(
           inv.focusNfeRef!,
           tenant.focusNfeToken!,
           tenant.nfeAmbiente ?? "homologacao",
         );
+
+        // Log completo para diagnóstico (remover após estabilizar)
+        console.log("[NFE-STATUS]", {
+          ref:        inv.focusNfeRef,
+          httpStatus,
+          focusStatus: data.status,
+          data,
+        });
+
+        const mappedStatus = mapFocusStatus(data.status);
+
         return prisma.invoice.update({
           where: { id: inv.id },
           data: {
-            status:    mapFocusStatus(data.status),
+            status:    mappedStatus,
             number:    data.numero       ?? inv.number,
             accessKey: data.chave_nfe    ?? inv.accessKey,
             xmlUrl:    data.caminho_xml   ?? inv.xmlUrl,
@@ -263,7 +274,9 @@ export async function GET(
               : inv.issuedAt,
             errorMsg: data.erros
               ? JSON.stringify(data.erros).slice(0, 500)
-              : inv.errorMsg,
+              : (mappedStatus === "ERRO" && !data.erros
+                  ? `Status Focus: ${data.status ?? "desconhecido"}`
+                  : inv.errorMsg),
           },
         });
       }),
@@ -275,6 +288,48 @@ export async function GET(
   );
 
   return NextResponse.json({ invoices: final });
+}
+
+// ─── PATCH /api/pedidos/[id]/emitir-nfe ──────────────────────────────────────
+// Força o status de uma invoice presa em PROCESSANDO para ERRO,
+// permitindo reemissão sem depender do retorno do Focus NF-e.
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const session = await auth();
+
+  if (!session?.user?.tenantId) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+  if (!["TENANT_ADMIN", "GERENTE", "SUPER_ADMIN"].includes(session.user.role)) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  }
+
+  const { invoiceId } = await req.json();
+  const { tenantId } = session.user;
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, tenantId, orderId: id, status: "PROCESSANDO" },
+  });
+
+  if (!invoice) {
+    return NextResponse.json(
+      { error: "NF-e não encontrada ou já processada." },
+      { status: 404 },
+    );
+  }
+
+  const updated = await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: {
+      status:   "ERRO",
+      errorMsg: "Resetado manualmente — rejeição SEFAZ (nova emissão permitida).",
+    },
+  });
+
+  return NextResponse.json({ invoice: updated });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
