@@ -142,9 +142,6 @@ function parseCsv(text: string): ParsedRow[] {
 
   // Normaliza os headers
   const normalizedHeaders = splitLine(lines[0]).map(normalizeHeader);
-  // DEBUG — remover após resolver
-  console.log("[CSV] headers originais:", splitLine(lines[0]));
-  console.log("[CSV] headers normalizados:", normalizedHeaders);
 
   const get = (row: string[], key: string) => {
     const idx = normalizedHeaders.indexOf(key);
@@ -157,7 +154,6 @@ function parseCsv(text: string): ParsedRow[] {
 
     const precoRaw = get(cols, "preco");
     const preco    = parsePrice(precoRaw);
-    if (i === 0) console.log("[CSV] linha 2 — precoRaw:", JSON.stringify(precoRaw), "→ preco:", preco);
 
     const ativoRaw = get(cols, "ativo").toLowerCase()
       .replace(/[ãà]/g, "a"); // normaliza "não" → "nao"
@@ -238,7 +234,10 @@ export function ProdutosBulkClient() {
       });
       const data = await res.json();
       setResult(data);
-      if (data.created > 0) router.refresh();
+      if (data.created > 0) {
+        // Hard reload — mais confiável que router.refresh() após inserção em lote
+        setTimeout(() => window.location.reload(), 1500);
+      }
     } catch {
       setResult({ created: 0, errors: ["Erro de conexão."] });
     } finally {
