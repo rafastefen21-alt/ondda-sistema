@@ -45,6 +45,7 @@ export default async function EditarProdutoPage({
         labelCaixa: product.labelCaixa ?? null,
         ncm: product.ncm ?? null,
         cfop: product.cfop ?? null,
+        imageUrl: product.imageUrl ?? null,
         categoryId: product.categoryId,
         active: product.active,
       }}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Upload, X, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,7 +42,6 @@ export function ProdutoForm({
   product?: ProductData;
   mode: "create" | "edit";
 }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? "");
@@ -124,8 +122,8 @@ export function ProdutoForm({
       return;
     }
 
-    router.push("/produtos");
-    router.refresh();
+    // Hard navigation — evita race entre push+refresh no Next.js 16
+    window.location.href = "/produtos";
   }
 
   return (
