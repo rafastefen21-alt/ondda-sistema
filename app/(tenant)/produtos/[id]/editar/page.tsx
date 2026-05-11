@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { ProdutoForm } from "../../produto-form";
 
 export default async function EditarProdutoPage({
@@ -8,7 +8,14 @@ export default async function EditarProdutoPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await auth();
+  let session;
+  try {
+    session = await auth();
+  } catch (err) {
+    console.error("[EditarProduto] auth() falhou:", err);
+    redirect("/login");
+  }
+
   if (!session?.user?.tenantId) redirect("/login");
 
   const { tenantId, role } = session.user;
@@ -16,39 +23,54 @@ export default async function EditarProdutoPage({
 
   const { id } = await params;
 
-  const [product, categories] = await Promise.all([
-    prisma.product.findFirst({
-      where: { id, tenantId },
-    }),
-    prisma.productCategory.findMany({
-      where: { tenantId },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  let product;
+  let categoriesRaw: { id: string; name: string }[] = [];
 
-  if (!product) notFound();
+  try {
+    const [prod, cats] = await Promise.all([
+      prisma.product.findFirst({ where: { id, tenantId } }),
+      prisma.productCategory.findMany({
+        where: { tenantId },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
+    product = prod;
+    categoriesRaw = cats;
+  } catch (err) {
+    console.error("[EditarProduto] prisma falhou:", err);
+    redirect("/produtos");
+  }
+
+  // Produto não encontrado → volta para lista (evita notFound() no RSC)
+  if (!product) redirect("/produtos");
+
+  // Garante objetos JSON puros para o RSC payload (sem tipos Prisma/Decimal)
+  const categories = categoriesRaw.map((c) => ({ id: c.id, name: c.name }));
+
+  const productData = {
+    id:           product.id,
+    name:         product.name,
+    description:  product.description ?? null,
+    price:        Number(product.price),
+    unit:         product.unit,
+    minQuantity:  product.minQuantity != null ? Number(product.minQuantity) : null,
+    shelfLifeDays: product.shelfLifeDays ?? null,
+    pricePacote:  product.pricePacote != null ? Number(product.pricePacote) : null,
+    priceCaixa:   product.priceCaixa  != null ? Number(product.priceCaixa)  : null,
+    labelPacote:  product.labelPacote  ?? null,
+    labelCaixa:   product.labelCaixa   ?? null,
+    ncm:          product.ncm           ?? null,
+    cfop:         product.cfop          ?? null,
+    imageUrl:     product.imageUrl      ?? null,
+    categoryId:   product.categoryId    ?? null,
+    active:       product.active,
+  };
 
   return (
     <ProdutoForm
       categories={categories}
-      product={{
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        price: Number(product.price),
-        unit: product.unit,
-        minQuantity: product.minQuantity ? Number(product.minQuantity) : null,
-        shelfLifeDays: product.shelfLifeDays ?? null,
-        pricePacote: product.pricePacote ? Number(product.pricePacote) : null,
-        priceCaixa: product.priceCaixa ? Number(product.priceCaixa) : null,
-        labelPacote: product.labelPacote ?? null,
-        labelCaixa: product.labelCaixa ?? null,
-        ncm: product.ncm ?? null,
-        cfop: product.cfop ?? null,
-        imageUrl: product.imageUrl ?? null,
-        categoryId: product.categoryId,
-        active: product.active,
-      }}
+      product={productData}
       mode="edit"
     />
   );
