@@ -30,6 +30,7 @@ const schema = z.object({
   state:            z.string().optional().nullable(),
   codigoCidade:     z.string().optional().nullable(),
   phone:            z.string().optional().nullable(),
+  emailRemetente:   z.string().max(200).optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -78,6 +79,7 @@ export async function PATCH(req: NextRequest) {
       ...(d.state            !== undefined ? { state:            d.state            || null } : {}),
       ...(d.codigoCidade     !== undefined ? { codigoCidade:     d.codigoCidade     || null } : {}),
       ...(d.phone            !== undefined ? { phone:            d.phone            || null } : {}),
+      ...(d.emailRemetente   !== undefined ? { emailRemetente:   d.emailRemetente   || null } : {}),
     },
   });
 

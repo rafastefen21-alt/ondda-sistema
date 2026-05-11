@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   CheckCircle, CreditCard, Eye, EyeOff, Link2, FileText,
-  AlertCircle, User, LogOut, Loader2,
+  AlertCircle, User, LogOut, Loader2, Mail,
 } from "lucide-react";
 
 const selectClass =
@@ -24,10 +24,11 @@ interface MpAccount {
 
 interface Props {
   initial: {
-    mpPublicKey:   string | null;
-    mpAccessToken: string | null;
-    focusNfeToken: string | null;
-    nfeAmbiente:   string | null;
+    mpPublicKey:    string | null;
+    mpAccessToken:  string | null;
+    focusNfeToken:  string | null;
+    nfeAmbiente:    string | null;
+    emailRemetente: string | null;
   };
 }
 
@@ -85,6 +86,12 @@ export function IntegracoesForm({ initial }: Props) {
   const [loadingNfe,    setLoadingNfe]    = useState(false);
   const [successNfe,    setSuccessNfe]    = useState(false);
   const [errorNfe,      setErrorNfe]      = useState("");
+
+  // ── E-mail remetente state ────────────────────────────────────────────────────
+  const [emailRemetente, setEmailRemetente] = useState(initial.emailRemetente ?? "");
+  const [loadingEmail,   setLoadingEmail]   = useState(false);
+  const [successEmail,   setSuccessEmail]   = useState(false);
+  const [errorEmail,     setErrorEmail]     = useState("");
 
   // ── Salvar credenciais MP manualmente ────────────────────────────────────────
   async function saveMp(e: React.FormEvent) {
@@ -144,6 +151,27 @@ export function IntegracoesForm({ initial }: Props) {
       setSuccessNfe(true);
       router.refresh();
       setTimeout(() => setSuccessNfe(false), 3000);
+    }
+  }
+
+  // ── Salvar e-mail remetente ───────────────────────────────────────────────────
+  async function saveEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setLoadingEmail(true);
+    setErrorEmail("");
+    setSuccessEmail(false);
+    const res = await fetch("/api/configuracoes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emailRemetente: emailRemetente || null }),
+    });
+    setLoadingEmail(false);
+    if (!res.ok) {
+      setErrorEmail("Erro ao salvar. Verifique o endereço e tente novamente.");
+    } else {
+      setSuccessEmail(true);
+      router.refresh();
+      setTimeout(() => setSuccessEmail(false), 3000);
     }
   }
 
@@ -386,6 +414,70 @@ export function IntegracoesForm({ initial }: Props) {
                 {loadingNfe ? "Salvando..." : "Salvar configuração NF-e"}
               </Button>
               {successNfe && (
+                <span className="flex items-center gap-1 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Salvo com sucesso!
+                </span>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      {/* ── E-mail de Envio ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Mail className="h-5 w-5 text-blue-500" />
+            E-mail de Envio
+            <span
+              className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
+                initial.emailRemetente
+                  ? "bg-green-100 text-green-700"
+                  : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {initial.emailRemetente ? "Configurado" : "Padrão do sistema"}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-gray-500">
+            Define o endereço remetente usado nas notificações de pedido enviadas aos clientes.
+            Deixe em branco para usar o padrão do sistema.
+          </p>
+          <form onSubmit={saveEmail} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="emailRemetente">Remetente (From)</Label>
+              <Input
+                id="emailRemetente"
+                type="text"
+                placeholder="ex: pedidos@suaempresa.com.br"
+                value={emailRemetente}
+                onChange={(e) => setEmailRemetente(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="text-xs text-gray-400">
+                ⚠️ O domínio deste e-mail deve estar verificado na sua conta{" "}
+                <a
+                  href="https://resend.com/domains"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-600"
+                >
+                  Resend
+                </a>
+                , caso contrário os envios serão rejeitados.
+              </p>
+            </div>
+
+            {errorEmail && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{errorEmail}</p>
+            )}
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={loadingEmail}>
+                {loadingEmail ? "Salvando..." : "Salvar e-mail"}
+              </Button>
+              {successEmail && (
                 <span className="flex items-center gap-1 text-sm text-green-600">
                   <CheckCircle className="h-4 w-4" />
                   Salvo com sucesso!

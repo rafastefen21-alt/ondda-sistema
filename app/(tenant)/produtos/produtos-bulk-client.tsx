@@ -22,11 +22,102 @@ interface ParsedRow {
 const TEMPLATE_HEADERS = ["nome", "descricao", "preco", "unidade", "categoria", "qtd_minima", "validade_dias", "ncm", "cfop", "ativo"];
 const TEMPLATE_EXAMPLE = ["Pão Francês", "Pão francês tradicional", "0.85", "un", "Pães", "1", "", "", "5102", "sim"];
 
+/**
+ * Normaliza um header CSV → chave canônica interna.
+ * Usa substituição explícita de caracteres portugueses (não depende de
+ * regex de combining chars que pode falhar dependendo do ambiente).
+ */
+function normalizeHeader(raw: string): string {
+  const s = raw
+    .trim()
+    .toLowerCase()
+    // Substituição explícita de letras acentuadas portuguesas
+    .replace(/[áàâã]/g, "a")
+    .replace(/[éèê]/g, "e")
+    .replace(/[íì]/g, "i")
+    .replace(/[óòôõ]/g, "o")
+    .replace(/[úù]/g, "u")
+    .replace(/ç/g, "c")
+    .replace(/\s+/g, "_"); // espaços → underline (qtd minima → qtd_minima)
+
+  const ALIASES: Record<string, string> = {
+    // status / ativo
+    status:            "ativo",
+    ativo:             "ativo",
+    active:            "ativo",
+    situacao:          "ativo",
+    // preço
+    preco:             "preco",
+    preco_venda:       "preco",
+    price:             "preco",
+    valor:             "preco",
+    venda:             "preco",
+    // nome
+    nome:              "nome",
+    name:              "nome",
+    produto:           "nome",
+    descricao_curta:   "nome",
+    // descrição
+    descricao:         "descricao",
+    description:       "descricao",
+    obs:               "descricao",
+    // unidade
+    unidade:           "unidade",
+    unid:              "unidade",
+    unit:              "unidade",
+    und:               "unidade",
+    un:                "unidade",
+    // categoria
+    categoria:         "categoria",
+    category:          "categoria",
+    grupo:             "categoria",
+    // qtd mínima
+    qtd_minima:        "qtd_minima",
+    qtd_min:           "qtd_minima",
+    quantidade_minima: "qtd_minima",
+    minimo:            "qtd_minima",
+    // validade
+    validade_dias:     "validade_dias",
+    validade:          "validade_dias",
+    dias_validade:     "validade_dias",
+    shelf_life:        "validade_dias",
+    // fiscal
+    ncm:               "ncm",
+    cfop:              "cfop",
+  };
+
+  return ALIASES[s] ?? s;
+}
+
+/**
+ * Converte valor monetário brasileiro para número.
+ * Aceita: "R$ 4,40" / "4,40" / "1.234,56" / "4.40" / "0.85"
+ */
+function parsePrice(raw: string): number {
+  // Remove tudo que não seja dígito, vírgula ou ponto
+  const stripped = raw.replace(/[^\d.,]/g, "").trim();
+  if (!stripped) return NaN;
+
+  const lastComma  = stripped.lastIndexOf(",");
+  const lastPeriod = stripped.lastIndexOf(".");
+
+  let normalized: string;
+  if (lastComma > lastPeriod) {
+    // Vírgula é separador decimal → formato BR (ex: 1.234,56 ou 4,40)
+    normalized = stripped.replace(/\./g, "").replace(",", ".");
+  } else {
+    // Ponto é separador decimal → formato US (ex: 4.40 ou 1,234.56)
+    normalized = stripped.replace(/,/g, "");
+  }
+
+  return parseFloat(normalized);
+}
+
 function parseCsv(text: string): ParsedRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
 
-  // Detect separator (comma or semicolon)
+  // Detecta separador (vírgula ou ponto-e-vírgula)
   const sep = lines[0].includes(";") ? ";" : ",";
 
   const splitLine = (line: string): string[] => {
@@ -49,19 +140,36 @@ function parseCsv(text: string): ParsedRow[] {
     return result;
   };
 
-  const rawHeaders = splitLine(lines[0]).map((h) => h.toLowerCase().trim());
+  // Normaliza os headers
+  const normalizedHeaders = splitLine(lines[0]).map(normalizeHeader);
+  // DEBUG — remover após resolver
+  console.log("[CSV] headers originais:", splitLine(lines[0]));
+  console.log("[CSV] headers normalizados:", normalizedHeaders);
 
   const get = (row: string[], key: string) => {
-    const idx = rawHeaders.indexOf(key);
+    const idx = normalizedHeaders.indexOf(key);
     return idx >= 0 ? (row[idx] ?? "").trim() : "";
   };
 
   return lines.slice(1).map((line, i) => {
     const cols = splitLine(line);
     const nome = get(cols, "nome");
-    const precoRaw = get(cols, "preco").replace(",", ".");
-    const preco = parseFloat(precoRaw);
-    const ativoRaw = get(cols, "ativo").toLowerCase();
+
+    const precoRaw = get(cols, "preco");
+    const preco    = parsePrice(precoRaw);
+    if (i === 0) console.log("[CSV] linha 2 — precoRaw:", JSON.stringify(precoRaw), "→ preco:", preco);
+
+    const ativoRaw = get(cols, "ativo").toLowerCase()
+      .replace(/[ãà]/g, "a"); // normaliza "não" → "nao"
+    const ativo = ativoRaw !== "inativo"
+      && ativoRaw !== "nao"
+      && ativoRaw !== "false"
+      && ativoRaw !== "0"
+      && ativoRaw !== "no";
+    // "ativo", "ativo", "sim", "yes", "true", "1", "" → true
+
+    const validade = get(cols, "validade_dias");
+    const validadeNum = validade ? parseInt(validade) : undefined;
 
     const row: ParsedRow = {
       nome,
@@ -69,15 +177,16 @@ function parseCsv(text: string): ParsedRow[] {
       preco:         isNaN(preco) ? 0 : preco,
       unidade:       get(cols, "unidade") || "un",
       categoria:     get(cols, "categoria") || undefined,
-      qtd_minima:    get(cols, "qtd_minima") ? parseFloat(get(cols, "qtd_minima").replace(",", ".")) : undefined,
-      validade_dias: get(cols, "validade_dias") ? parseInt(get(cols, "validade_dias")) : undefined,
+      qtd_minima:    get(cols, "qtd_minima") ? parsePrice(get(cols, "qtd_minima")) : undefined,
+      validade_dias: validade && !isNaN(validadeNum!) ? validadeNum : undefined,
       ncm:           get(cols, "ncm") || undefined,
       cfop:          get(cols, "cfop") || undefined,
-      ativo:         ativoRaw !== "nao" && ativoRaw !== "não" && ativoRaw !== "false" && ativoRaw !== "0",
+      ativo,
     };
 
-    if (!row.nome) row._error = `Linha ${i + 2}: nome obrigatório`;
-    if (isNaN(preco) || preco <= 0) row._error = `Linha ${i + 2}: preço inválido ("${precoRaw}")`;
+    if (!row.nome)              row._error = `Linha ${i + 2}: nome obrigatório`;
+    else if (isNaN(preco) || preco <= 0)
+      row._error = `Linha ${i + 2}: preço inválido ("${precoRaw || "(coluna não encontrada)"}")`;
 
     return row;
   });

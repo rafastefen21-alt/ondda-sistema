@@ -98,6 +98,9 @@ model Tenant {
   bairro           String?
   codigoCidade     String?  // Código IBGE do município (7 dígitos)
 
+  // E-mail de envio (remetente nas notificações — deve ser de domínio verificado no Resend)
+  emailRemetente   String?
+
   // Personalização da loja pública
   lojaCorPrimaria  String?  @default("#f59e0b")
   lojaBannerUrl    String?

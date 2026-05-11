@@ -966,108 +966,156 @@ export function OrderDetailClient({
                 {/* NF-es existentes */}
                 {order.invoices.map((inv) => (
                   <div key={inv.id} className="space-y-2">
-                    <div
-                      className={`rounded-lg px-3 py-2.5 ${
-                        inv.status === "EMITIDA"   ? "bg-green-50 border border-green-200"
-                        : inv.status === "CANCELADA" ? "bg-gray-50 border border-gray-200"
-                        : inv.status === "ERRO"      ? "bg-red-50 border border-red-200"
-                        : "bg-yellow-50 border border-yellow-200"
-                      }`}
-                    >
-                      {/* Linha principal */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900">
-                            {inv.number ? `NF-e nº ${inv.number}` : "NF-e em processamento"}
-                          </p>
-                          <p className={`text-xs font-semibold ${
-                            inv.status === "EMITIDA"    ? "text-green-700"
-                            : inv.status === "CANCELADA" ? "text-gray-500"
-                            : inv.status === "ERRO"      ? "text-red-600"
-                            : "text-yellow-700"
-                          }`}>
-                            {inv.status === "EMITIDA"    ? `✓ Emitida${inv.issuedAt ? ` · ${formatDate(inv.issuedAt)}` : ""}`
-                             : inv.status === "CANCELADA" ? "✕ Cancelada"
-                             : inv.status === "ERRO"      ? "✕ Erro na emissão"
-                             : "⏳ Processando..."}
-                          </p>
-                          {inv.status === "ERRO" && inv.errorMsg && (
-                            <p className="mt-0.5 text-xs text-red-500">{inv.errorMsg}</p>
+
+                    {/* ── Card principal ── */}
+                    <div className={`rounded-xl border p-4 ${
+                      inv.status === "EMITIDA"
+                        ? "border-green-200 bg-green-50"
+                        : inv.status === "CANCELADA"
+                        ? "border-gray-200 bg-gray-50"
+                        : inv.status === "ERRO"
+                        ? "border-red-200 bg-red-50"
+                        : "border-amber-200 bg-amber-50"
+                    }`}>
+
+                      {/* Cabeçalho: número + badge de status */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {inv.status === "EMITIDA" && (
+                            <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
                           )}
-                          {inv.accessKey && (
-                            <p className="mt-0.5 truncate text-xs text-gray-400 font-mono">
-                              {inv.accessKey}
-                            </p>
+                          {inv.status === "CANCELADA" && (
+                            <XCircle className="h-4 w-4 shrink-0 text-gray-400" />
                           )}
+                          {inv.status === "ERRO" && (
+                            <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                          )}
+                          {inv.status === "PROCESSANDO" && (
+                            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+                          )}
+                          <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                            {inv.number ? `NF-e nº ${inv.number}` : "NF-e"}
+                          </span>
                         </div>
 
-                        {/* Ações */}
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          {inv.status === "PROCESSANDO" && (
-                            <>
-                              <button
-                                onClick={refreshNfeStatus}
-                                disabled={refreshingNfe || !!resettingId}
-                                title="Consultar status atualizado na SEFAZ"
-                                className="flex items-center gap-1 rounded border border-yellow-200 bg-white px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-50 disabled:opacity-50"
-                              >
-                                <RefreshCw className={`h-3 w-3 ${refreshingNfe ? "animate-spin" : ""}`} />
-                                {refreshingNfe ? "..." : "Atualizar"}
-                              </button>
-                              <button
-                                onClick={() => resetNfeToError(inv.id)}
-                                disabled={!!resettingId || refreshingNfe}
-                                title="Marcar como erro para permitir nova emissão"
-                                className="flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              >
-                                {resettingId === inv.id
-                                  ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-400 border-t-transparent" />
-                                  : <XCircle className="h-3 w-3" />}
-                                {resettingId === inv.id ? "..." : "Resetar"}
-                              </button>
-                            </>
-                          )}
-                          {inv.pdfUrl && (
-                            <a
-                              href={inv.pdfUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 rounded border border-green-200 bg-white px-2 py-1 text-xs text-green-700 hover:bg-green-50"
-                            >
-                              <Download className="h-3 w-3" />
-                              DANFe
-                            </a>
-                          )}
-                          {inv.xmlUrl && (
-                            <a
-                              href={inv.xmlUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                            >
-                              <Download className="h-3 w-3" />
-                              XML
-                            </a>
-                          )}
-                          {inv.status === "EMITIDA" && canUseNfe && (
-                            <button
-                              onClick={() => {
-                                setCancellingId(inv.id);
-                                setCancelJust("");
-                                setCancelError("");
-                              }}
-                              className="flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                            >
-                              <Ban className="h-3 w-3" />
-                              Cancelar NF-e
-                            </button>
-                          )}
-                        </div>
+                        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          inv.status === "EMITIDA"
+                            ? "bg-green-100 text-green-700"
+                            : inv.status === "CANCELADA"
+                            ? "bg-gray-200 text-gray-600"
+                            : inv.status === "ERRO"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {inv.status === "EMITIDA"    ? "Emitida"
+                           : inv.status === "CANCELADA" ? "Cancelada"
+                           : inv.status === "ERRO"      ? "Erro"
+                           : "Processando…"}
+                        </span>
                       </div>
 
-                      {/* Formulário de justificativa de cancelamento */}
+                      {/* Data de emissão */}
+                      {inv.issuedAt && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Emitida em {formatDate(inv.issuedAt)}
+                        </p>
+                      )}
+
+                      {/* Estado PROCESSANDO — mensagem */}
+                      {inv.status === "PROCESSANDO" && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Aguardando processamento na SEFAZ. Atualizando automaticamente…
+                        </p>
+                      )}
+
+                      {/* Chave de acesso */}
+                      {inv.accessKey && (
+                        <div className="mt-2.5">
+                          <p className="text-xs font-medium text-gray-500 mb-0.5">Chave de acesso</p>
+                          <p className="break-all rounded bg-white/70 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-gray-600 border border-gray-200">
+                            {inv.accessKey}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Mensagem de erro */}
+                      {inv.status === "ERRO" && inv.errorMsg && (
+                        <p className="mt-2 rounded bg-red-100 px-2.5 py-1.5 text-xs text-red-700">
+                          {inv.errorMsg}
+                        </p>
+                      )}
+
+                      {/* ── Botões de ação ── */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {/* PROCESSANDO */}
+                        {inv.status === "PROCESSANDO" && (
+                          <>
+                            <button
+                              onClick={refreshNfeStatus}
+                              disabled={refreshingNfe || !!resettingId}
+                              className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:opacity-50"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${refreshingNfe ? "animate-spin" : ""}`} />
+                              {refreshingNfe ? "Consultando…" : "Atualizar status"}
+                            </button>
+                            <button
+                              onClick={() => resetNfeToError(inv.id)}
+                              disabled={!!resettingId || refreshingNfe}
+                              className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {resettingId === inv.id
+                                ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-400 border-t-transparent" />
+                                : <XCircle className="h-3.5 w-3.5" />}
+                              {resettingId === inv.id ? "Resetando…" : "Forçar erro"}
+                            </button>
+                          </>
+                        )}
+
+                        {/* DANFe */}
+                        {inv.pdfUrl && (
+                          <a
+                            href={inv.pdfUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 py-1.5 text-xs font-medium text-green-700 transition hover:bg-green-50"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            DANFe (PDF)
+                          </a>
+                        )}
+
+                        {/* XML */}
+                        {inv.xmlUrl && (
+                          <a
+                            href={inv.xmlUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            XML
+                          </a>
+                        )}
+
+                        {/* Cancelar NF-e */}
+                        {inv.status === "EMITIDA" && canUseNfe && (
+                          <button
+                            onClick={() => {
+                              setCancellingId(inv.id);
+                              setCancelJust("");
+                              setCancelError("");
+                            }}
+                            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            Cancelar NF-e
+                          </button>
+                        )}
+                      </div>
+
+                      {/* ── Formulário de cancelamento ── */}
                       {cancellingId === inv.id && (
-                        <div className="mt-3 space-y-2 rounded-lg border border-red-200 bg-white p-3">
+                        <div className="mt-3 rounded-xl border border-red-200 bg-white p-3 space-y-2.5">
                           <p className="text-xs font-semibold text-red-700">
                             Justificativa de cancelamento
                           </p>
@@ -1076,10 +1124,10 @@ export function OrderDetailClient({
                             onChange={(e) => setCancelJust(e.target.value)}
                             rows={2}
                             placeholder="Mínimo 15 caracteres. Ex: Pedido cancelado a pedido do cliente."
-                            className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-400 resize-none"
+                            className="w-full resize-none rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-400"
                           />
                           <p className={`text-xs ${cancelJust.length >= 15 ? "text-green-600" : "text-gray-400"}`}>
-                            {cancelJust.length} / 15 caracteres mínimos
+                            {cancelJust.length}/15 caracteres mínimos
                           </p>
                           {cancelError && (
                             <p className="text-xs text-red-600">{cancelError}</p>
@@ -1093,7 +1141,7 @@ export function OrderDetailClient({
                               {cancelLoading
                                 ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                                 : <Ban className="h-3.5 w-3.5" />}
-                              {cancelLoading ? "Cancelando..." : "Confirmar cancelamento"}
+                              {cancelLoading ? "Cancelando…" : "Confirmar cancelamento"}
                             </button>
                             <button
                               onClick={() => { setCancellingId(null); setCancelJust(""); setCancelError(""); }}
@@ -1161,14 +1209,14 @@ export function OrderDetailClient({
                   <button
                     onClick={emitirNfe}
                     disabled={emittingNfe}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 py-2.5 text-sm font-medium text-green-700 transition hover:bg-green-100 disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-700 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-800 disabled:opacity-50"
                   >
                     {emittingNfe ? (
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-green-500 border-t-transparent" />
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                     ) : (
                       <FileText className="h-4 w-4" />
                     )}
-                    {emittingNfe ? "Emitindo NF-e..." : "Emitir NF-e"}
+                    {emittingNfe ? "Emitindo NF-e…" : "Emitir NF-e"}
                   </button>
                 )}
               </CardContent>

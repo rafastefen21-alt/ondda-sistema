@@ -200,10 +200,14 @@ function orderStatusHtml(data: OrderEmailData): string {
 /**
  * Envia e-mail de atualização de status do pedido.
  * Não lança erro — falha silenciosa com log (para não quebrar o fluxo principal).
+ *
+ * @param fromOverride  E-mail remetente configurado pelo tenant (substitui EMAIL_FROM).
+ *                      Deve pertencer a um domínio verificado no Resend.
  */
 export async function sendOrderStatusEmail(
   to: string | string[],
   data: OrderEmailData,
+  fromOverride?: string | null,
 ): Promise<void> {
   if (!process.env.RESEND_API_KEY) {
     console.warn("[EMAIL] RESEND_API_KEY não configurada — email não enviado.");
@@ -214,17 +218,18 @@ export async function sendOrderStatusEmail(
   const validRecipients = recipients.filter(Boolean);
   if (validRecipients.length === 0) return;
 
-  const statusLabel = STATUS_LABELS[data.status] ?? data.status;
-  const shortId     = data.orderId.slice(-8).toUpperCase();
+  const fromAddress  = fromOverride?.trim() || FROM;
+  const statusLabel  = STATUS_LABELS[data.status] ?? data.status;
+  const shortId      = data.orderId.slice(-8).toUpperCase();
 
   try {
     const result = await getResend().emails.send({
-      from:    FROM,
+      from:    fromAddress,
       to:      validRecipients,
       subject: `Pedido #${shortId} — ${statusLabel} | ${data.tenantName}`,
       html:    orderStatusHtml(data),
     });
-    console.log("[EMAIL] enviado para", validRecipients, result);
+    console.log("[EMAIL] enviado para", validRecipients, "from", fromAddress, result);
   } catch (err) {
     console.error("[EMAIL] erro ao enviar:", err);
   }

@@ -169,10 +169,11 @@ export default async function ConfiguracoesPage() {
           {tenant && (
             <IntegracoesForm
               initial={{
-                mpPublicKey:   tenant.mpPublicKey   ?? null,
-                mpAccessToken: tenant.mpAccessToken ?? null,
-                focusNfeToken: tenant.focusNfeToken ?? null,
-                nfeAmbiente:   tenant.nfeAmbiente   ?? null,
+                mpPublicKey:    tenant.mpPublicKey    ?? null,
+                mpAccessToken:  tenant.mpAccessToken  ?? null,
+                focusNfeToken:  tenant.focusNfeToken  ?? null,
+                nfeAmbiente:    tenant.nfeAmbiente    ?? null,
+                emailRemetente: tenant.emailRemetente ?? null,
               }}
             />
           )}

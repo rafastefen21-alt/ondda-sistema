@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { OrderStatus } from "@/app/generated/prisma/client";
 import { sendOrderStatusEmail } from "@/lib/email";
-import { deductStockForOrder } from "@/lib/stock";
+import { deductStockForOrder, restoreStockForOrder, STATUSES_WITH_STOCK_DEDUCTED } from "@/lib/stock";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -176,10 +176,6 @@ export async function PATCH(
       if (parsed.data.scheduledDeliveryDate) {
         updateData.scheduledDeliveryDate = new Date(parsed.data.scheduledDeliveryDate);
       }
-      // Desconta estoque automaticamente ao aprovar
-      deductStockForOrder(session.user.tenantId, id).catch((err) =>
-        console.error("[STOCK] erro ao descontar estoque:", err),
-      );
     }
     if (newStatus === "ENTREGUE") updateData.deliveredAt = new Date();
     if (newStatus === "CANCELADO") updateData.cancelledAt = new Date();
@@ -196,9 +192,28 @@ export async function PATCH(
           decisorEmail: true, decisorNome: true,
         },
       },
-      tenant: { select: { name: true } },
+      tenant: { select: { name: true, emailRemetente: true } },
     },
   });
+
+  // ── Movimentações de estoque (awaited — deve completar antes de retornar) ────
+  if (parsed.data.status === "APROVADO") {
+    try {
+      await deductStockForOrder(session.user.tenantId, id);
+    } catch (err) {
+      console.error("[STOCK] erro ao descontar estoque:", err);
+    }
+  }
+  if (
+    parsed.data.status === "CANCELADO" &&
+    (STATUSES_WITH_STOCK_DEDUCTED as readonly string[]).includes(currentStatus)
+  ) {
+    try {
+      await restoreStockForOrder(session.user.tenantId, id);
+    } catch (err) {
+      console.error("[STOCK] erro ao restaurar estoque:", err);
+    }
+  }
 
   // ── Envia e-mail de notificação se houve mudança de status ────────────────
   if (parsed.data.status) {
@@ -225,7 +240,7 @@ export async function PATCH(
       })),
       scheduledDeliveryDate: updated.scheduledDeliveryDate,
       appUrl,
-    }).catch((err) => console.error("[EMAIL] falha silenciosa:", err));
+    }, tenant.emailRemetente).catch((err) => console.error("[EMAIL] falha silenciosa:", err));
   }
 
   return NextResponse.json(updated);

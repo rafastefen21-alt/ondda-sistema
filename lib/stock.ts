@@ -88,3 +88,42 @@ export async function deductStockForOrder(
     ),
   );
 }
+
+/**
+ * Statuses que já tiveram o estoque descontado.
+ * Ao cancelar um pedido nestes estados, o estoque deve ser restaurado.
+ */
+export const STATUSES_WITH_STOCK_DEDUCTED = [
+  "APROVADO",
+  "EM_PRODUCAO",
+  "PRONTO",
+  "EM_ENTREGA",
+] as const;
+
+/**
+ * Restaura estoque de todos os itens de um pedido cancelado.
+ * Só deve ser chamado se o pedido estava em um status que já havia descontado.
+ */
+export async function restoreStockForOrder(
+  tenantId: string,
+  orderId:  string,
+) {
+  const order = await prisma.order.findFirst({
+    where:   { id: orderId, tenantId },
+    include: { items: true },
+  });
+  if (!order) return;
+
+  await Promise.all(
+    order.items.map((item) =>
+      adjustStock({
+        tenantId,
+        productId: item.productId,
+        delta:     +Number(item.quantity),
+        type:      "ENTRADA",
+        reason:    `Pedido cancelado #${orderId.slice(-8).toUpperCase()} — estoque restaurado`,
+        orderId,
+      }),
+    ),
+  );
+}

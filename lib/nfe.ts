@@ -116,12 +116,19 @@ export function validateNfeReady(order: NfeOrder, tenant: NfeTenant): NfeValidat
   // Destinatário
   const clientLabel = order.client.name ?? order.client.email;
   if (!order.client.cpf && !order.client.cnpj) {
-    missing.push(`CPF ou CNPJ do cliente "${clientLabel}"`);
+    missing.push(`CPF ou CNPJ do cliente "${clientLabel}" (Clientes → Editar)`);
   } else if (order.client.cnpj && !isValidCnpj(order.client.cnpj)) {
-    missing.push(`CNPJ do cliente "${clientLabel}" é inválido (dígitos verificadores não conferem) — corrija em Clientes → Editar`);
+    missing.push(`CNPJ do cliente "${clientLabel}" é inválido — corrija em Clientes → Editar`);
   } else if (order.client.cpf && !order.client.cnpj && !isValidCpf(order.client.cpf)) {
     missing.push(`CPF do cliente "${clientLabel}" é inválido — corrija em Clientes → Editar`);
   }
+  if (!order.client.cep)         missing.push(`CEP do cliente "${clientLabel}" (Clientes → Editar)`);
+  if (!order.client.logradouro)  missing.push(`Logradouro do cliente "${clientLabel}" (Clientes → Editar)`);
+  if (!order.client.numero)      missing.push(`Número do endereço do cliente "${clientLabel}" (Clientes → Editar)`);
+  if (!order.client.bairro)      missing.push(`Bairro do cliente "${clientLabel}" (Clientes → Editar)`);
+  if (!order.client.city)        missing.push(`Município do cliente "${clientLabel}" (Clientes → Editar)`);
+  if (!order.client.state)       missing.push(`UF do cliente "${clientLabel}" (Clientes → Editar)`);
+  if (!order.client.codigoCidade) missing.push(`Código IBGE do município do cliente "${clientLabel}" (Clientes → Editar)`);
 
   // Produtos
   for (const item of order.items) {

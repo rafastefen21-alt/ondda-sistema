@@ -55,6 +55,7 @@ export function ClienteForm({
   const [error,      setError]      = useState("");
   const [cep,        setCep]        = useState(client?.cep ?? "");
   const [logradouro, setLogradouro] = useState(client?.logradouro ?? "");
+  const [numero,     setNumero]     = useState(client?.numero ?? "");
   const [bairro,     setBairro]     = useState(client?.bairro ?? "");
   const [city,       setCity]       = useState(client?.city ?? "");
   const [state,      setState]      = useState(client?.state ?? "");
@@ -63,6 +64,8 @@ export function ClienteForm({
   const [cnpj, setCnpj] = useState(client?.cnpj ?? "");
   const [cpf,  setCpf]  = useState(client?.cpf  ?? "");
   const [ie,   setIe]   = useState(client?.ie   ?? "");
+  // Erros de validação NF-e por campo
+  const [nfeErrors, setNfeErrors] = useState<Record<string, string>>({});
 
   function maskCep(raw: string): string {
     const d = raw.replace(/\D/g, "").slice(0, 8);
@@ -93,6 +96,36 @@ export function ClienteForm({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+
+    // ── Validação dos campos obrigatórios para NF-e ───────────────────────────
+    const errs: Record<string, string> = {};
+    if (!cnpj && !cpf) {
+      errs.cnpjCpf = "Informe o CNPJ ou o CPF — obrigatório para emissão de NF-e.";
+    } else if (cnpj && !isValidCnpj(cnpj)) {
+      errs.cnpj = "CNPJ inválido — verifique os dígitos.";
+    } else if (cpf && !cnpj && !isValidCpf(cpf)) {
+      errs.cpf = "CPF inválido — verifique os dígitos.";
+    }
+    if (!cep || cep.replace(/\D/g, "").length !== 8)
+      errs.cep = "CEP obrigatório (8 dígitos).";
+    if (!logradouro.trim())
+      errs.logradouro = "Logradouro obrigatório.";
+    if (!numero.trim())
+      errs.numero = "Número obrigatório.";
+    if (!bairro.trim())
+      errs.bairro = "Bairro obrigatório.";
+    if (!city.trim())
+      errs.city = "Município obrigatório.";
+    if (!state)
+      errs.state = "UF obrigatória.";
+    if (!codigoCidade.trim())
+      errs.codigoCidade = "Código IBGE obrigatório — será preenchido automaticamente pelo CEP.";
+
+    if (Object.keys(errs).length > 0) {
+      setNfeErrors(errs);
+      return;
+    }
+    setNfeErrors({});
     setLoading(true);
 
     const fd = new FormData(e.currentTarget);
@@ -105,7 +138,7 @@ export function ClienteForm({
       ie:           ie   || null,
       cep:          cep               || null,
       logradouro:   logradouro        || null,
-      numero:       fd.get("numero")  || null,
+      numero:       numero            || null,
       complemento:  fd.get("complemento") || null,
       bairro:       bairro            || null,
       city:         city              || null,
@@ -304,51 +337,57 @@ export function ClienteForm({
         </Card>
 
         {/* ── Dados fiscais ── */}
-        <Card>
+        <Card className={Object.keys(nfeErrors).length > 0 ? "border-red-300" : ""}>
           <CardHeader>
             <CardTitle className="text-base">
               Dados Fiscais
-              <span className="ml-2 text-sm font-normal text-gray-400">(para NF-e)</span>
+              <span className="ml-2 text-sm font-normal text-gray-400">(obrigatórios para NF-e)</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+
+            {/* Erro geral de CNPJ/CPF */}
+            {nfeErrors.cnpjCpf && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">{nfeErrors.cnpjCpf}</p>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="cnpj">CNPJ</Label>
+                <Label htmlFor="cnpj">CNPJ <span className="text-red-500">*</span></Label>
                 <Input
                   id="cnpj"
                   value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
+                  onChange={(e) => { setCnpj(e.target.value); setNfeErrors((p) => ({ ...p, cnpj: "", cnpjCpf: "" })); }}
                   placeholder="00.000.000/0000-00"
                   maxLength={18}
                   className={
-                    cnpj && !isValidCnpj(cnpj)
+                    (cnpj && !isValidCnpj(cnpj)) || nfeErrors.cnpj
                       ? "border-red-400 focus:ring-red-400"
                       : ""
                   }
                 />
-                {cnpj && !isValidCnpj(cnpj) && (
-                  <p className="text-xs text-red-500">CNPJ inválido — verifique os dígitos.</p>
-                )}
+                {(cnpj && !isValidCnpj(cnpj)) || nfeErrors.cnpj ? (
+                  <p className="text-xs text-red-500">{nfeErrors.cnpj || "CNPJ inválido — verifique os dígitos."}</p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="cpf">CPF</Label>
+                <Label htmlFor="cpf">CPF <span className="text-red-500">*</span></Label>
                 <Input
                   id="cpf"
                   value={cpf}
-                  onChange={(e) => setCpf(e.target.value)}
+                  onChange={(e) => { setCpf(e.target.value); setNfeErrors((p) => ({ ...p, cpf: "", cnpjCpf: "" })); }}
                   placeholder="000.000.000-00"
                   maxLength={14}
                   className={
-                    cpf && !isValidCpf(cpf)
+                    (cpf && !isValidCpf(cpf)) || nfeErrors.cpf
                       ? "border-red-400 focus:ring-red-400"
                       : ""
                   }
                 />
-                {cpf && !isValidCpf(cpf) ? (
-                  <p className="text-xs text-red-500">CPF inválido — verifique os dígitos.</p>
+                {(cpf && !isValidCpf(cpf)) || nfeErrors.cpf ? (
+                  <p className="text-xs text-red-500">{nfeErrors.cpf || "CPF inválido — verifique os dígitos."}</p>
                 ) : (
-                  <p className="text-xs text-gray-400">Preencha CNPJ ou CPF.</p>
+                  <p className="text-xs text-gray-400">Preencha CNPJ <strong>ou</strong> CPF.</p>
                 )}
               </div>
 
@@ -363,7 +402,7 @@ export function ClienteForm({
                   maxLength={30}
                 />
                 <p className="text-xs text-gray-400">
-                  Obrigatória para NF-e B2B. Sem IE = operação com consumidor final (indIEDest=9).
+                  Obrigatória para NF-e B2B. Sem IE = consumidor final (indIEDest=9).
                   Use <strong>ISENTO</strong> se o cliente for isento de IE.
                 </p>
               </div>
@@ -371,16 +410,16 @@ export function ClienteForm({
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="cep">CEP</Label>
+                <Label htmlFor="cep">CEP <span className="text-red-500">*</span></Label>
                 <div className="relative">
                   <Input
                     id="cep"
                     value={cep}
-                    onChange={(e) => buscarCep(e.target.value)}
+                    onChange={(e) => { buscarCep(e.target.value); setNfeErrors((p) => ({ ...p, cep: "" })); }}
                     placeholder="00000-000"
                     maxLength={9}
                     className={
-                      cep && cep.replace(/\D/g, "").length !== 8
+                      nfeErrors.cep || (cep && cep.replace(/\D/g, "").length !== 8)
                         ? "border-red-400 focus:ring-red-400"
                         : ""
                     }
@@ -389,43 +428,90 @@ export function ClienteForm({
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">buscando...</span>
                   )}
                 </div>
-                {cep && cep.replace(/\D/g, "").length !== 8 ? (
-                  <p className="text-xs text-red-500">CEP deve ter 8 dígitos (ex: 03342-000)</p>
+                {nfeErrors.cep ? (
+                  <p className="text-xs text-red-500">{nfeErrors.cep}</p>
+                ) : cep && cep.replace(/\D/g, "").length !== 8 ? (
+                  <p className="text-xs text-red-500">CEP deve ter 8 dígitos.</p>
                 ) : (
                   <p className="text-xs text-gray-400">Preenchimento automático.</p>
                 )}
               </div>
               <div className="space-y-1.5 col-span-2">
-                <Label htmlFor="logradouro">Logradouro</Label>
-                <Input id="logradouro" value={logradouro} onChange={(e) => setLogradouro(e.target.value)} placeholder="Rua, Avenida..." />
+                <Label htmlFor="logradouro">Logradouro <span className="text-red-500">*</span></Label>
+                <Input
+                  id="logradouro"
+                  value={logradouro}
+                  onChange={(e) => { setLogradouro(e.target.value); setNfeErrors((p) => ({ ...p, logradouro: "" })); }}
+                  placeholder="Rua, Avenida..."
+                  className={nfeErrors.logradouro ? "border-red-400 focus:ring-red-400" : ""}
+                />
+                {nfeErrors.logradouro && <p className="text-xs text-red-500">{nfeErrors.logradouro}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="numero">Número</Label>
-                <Input id="numero" name="numero" defaultValue={client?.numero ?? ""} placeholder="123" />
+                <Label htmlFor="numero">Número <span className="text-red-500">*</span></Label>
+                <Input
+                  id="numero"
+                  value={numero}
+                  onChange={(e) => { setNumero(e.target.value); setNfeErrors((p) => ({ ...p, numero: "" })); }}
+                  placeholder="123"
+                  className={nfeErrors.numero ? "border-red-400 focus:ring-red-400" : ""}
+                />
+                {nfeErrors.numero && <p className="text-xs text-red-500">{nfeErrors.numero}</p>}
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="complemento">Complemento</Label>
                 <Input id="complemento" name="complemento" defaultValue={client?.complemento ?? ""} placeholder="Apto, Sala..." />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="bairro">Bairro</Label>
-                <Input id="bairro" value={bairro} onChange={(e) => setBairro(e.target.value)} placeholder="Centro" />
+                <Label htmlFor="bairro">Bairro <span className="text-red-500">*</span></Label>
+                <Input
+                  id="bairro"
+                  value={bairro}
+                  onChange={(e) => { setBairro(e.target.value); setNfeErrors((p) => ({ ...p, bairro: "" })); }}
+                  placeholder="Centro"
+                  className={nfeErrors.bairro ? "border-red-400 focus:ring-red-400" : ""}
+                />
+                {nfeErrors.bairro && <p className="text-xs text-red-500">{nfeErrors.bairro}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="city">Município</Label>
-                <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="São Paulo" />
+                <Label htmlFor="city">Município <span className="text-red-500">*</span></Label>
+                <Input
+                  id="city"
+                  value={city}
+                  onChange={(e) => { setCity(e.target.value); setNfeErrors((p) => ({ ...p, city: "" })); }}
+                  placeholder="São Paulo"
+                  className={nfeErrors.city ? "border-red-400 focus:ring-red-400" : ""}
+                />
+                {nfeErrors.city && <p className="text-xs text-red-500">{nfeErrors.city}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="state">UF</Label>
+                <Label htmlFor="state">UF <span className="text-red-500">*</span></Label>
                 <select
                   id="state"
                   value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  className={selectClass}
+                  onChange={(e) => { setState(e.target.value); setNfeErrors((p) => ({ ...p, state: "" })); }}
+                  className={`${selectClass}${nfeErrors.state ? " border-red-400" : ""}`}
                 >
                   <option value="">UF</option>
                   {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
                 </select>
+                {nfeErrors.state && <p className="text-xs text-red-500">{nfeErrors.state}</p>}
+              </div>
+              <div className="space-y-1.5 col-span-3">
+                <Label htmlFor="codigoCidade">Código IBGE <span className="text-red-500">*</span></Label>
+                <Input
+                  id="codigoCidade"
+                  value={codigoCidade}
+                  onChange={(e) => { setCodigoCidade(e.target.value); setNfeErrors((p) => ({ ...p, codigoCidade: "" })); }}
+                  placeholder="Ex: 3550308"
+                  maxLength={7}
+                  className={nfeErrors.codigoCidade ? "border-red-400 focus:ring-red-400" : ""}
+                />
+                {nfeErrors.codigoCidade ? (
+                  <p className="text-xs text-red-500">{nfeErrors.codigoCidade}</p>
+                ) : (
+                  <p className="text-xs text-gray-400">Preenchido automaticamente pelo CEP.</p>
+                )}
               </div>
             </div>
           </CardContent>
