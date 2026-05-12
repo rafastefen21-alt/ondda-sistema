@@ -18,9 +18,14 @@ export default function TenantError({
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-md rounded-xl border border-red-200 bg-white p-8 shadow-lg">
         <h1 className="mb-2 text-xl font-bold text-red-700">Erro ao carregar a página</h1>
-        <p className="mb-4 text-sm text-gray-600">
+        <p className="mb-2 text-sm text-gray-600">
           {error?.message || "Ocorreu um erro inesperado."}
         </p>
+        {error?.stack && (
+          <pre className="mb-4 overflow-auto rounded-lg bg-gray-100 p-3 text-xs text-gray-500 break-all whitespace-pre-wrap max-h-60">
+            {error.stack}
+          </pre>
+        )}
         {error?.digest && (
           <p className="mb-6 rounded-lg bg-gray-100 p-3 font-mono text-xs text-gray-500 break-all">
             digest: {error.digest}

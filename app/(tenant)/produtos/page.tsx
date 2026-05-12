@@ -87,11 +87,14 @@ export default async function ProdutosPage() {
                       </div>
                     </div>
                     {canManage && (
-                      <Link href={`/produtos/${product.id}/editar`}>
+                      /* Navegação forçada (MPA) — evita crash no segment-cache do Next.js 16
+                         ao navegar para rota dinâmica aninhada via RSC client navigation */
+                      // eslint-disable-next-line @next/next/no-html-link-for-pages
+                      <a href={`/produtos/${product.id}/editar`}>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                      </Link>
+                      </a>
                     )}
                   </div>
                   <div className="mt-3 flex items-center justify-between">

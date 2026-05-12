@@ -1,43 +1,42 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
-import { AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 export default function ErrorEditarProduto({
   error,
   reset,
+  unstable_retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  reset?: () => void;
+  unstable_retry?: () => void;
 }) {
+  const retry = unstable_retry ?? reset;
+
   useEffect(() => {
-    console.error("[EditarProduto] erro:", error);
+    console.error("[EditarProduto] erro:", error?.message, error?.stack);
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-lg">
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-          <div>
-            <p className="font-semibold text-red-800">Erro ao carregar produto</p>
-            <p className="mt-1 text-sm text-red-600">
-              {error.message || "Ocorreu um erro inesperado. Tente novamente."}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" size="sm" onClick={reset}>
+    <div style={{ maxWidth: 600, margin: "2rem auto", padding: "1.5rem", border: "1px solid #fca5a5", borderRadius: 12, background: "#fff7f7" }}>
+      <p style={{ fontWeight: 700, color: "#b91c1c", marginBottom: 8 }}>Erro ao carregar produto</p>
+      <p style={{ color: "#dc2626", fontSize: 14, marginBottom: 8 }}>
+        {error?.message ?? "Erro desconhecido"}
+      </p>
+      {error?.stack && (
+        <pre style={{ fontSize: 11, color: "#6b7280", background: "#f3f4f6", padding: "8px 12px", borderRadius: 8, overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflowY: "auto" }}>
+          {error.stack}
+        </pre>
+      )}
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        {retry && (
+          <button onClick={retry} style={{ padding: "6px 16px", borderRadius: 8, background: "#1d4ed8", color: "#fff", border: "none", cursor: "pointer", fontSize: 13 }}>
             Tentar novamente
-          </Button>
-          <Link href="/produtos">
-            <Button size="sm" variant="ghost">
-              Voltar para produtos
-            </Button>
-          </Link>
-        </div>
+          </button>
+        )}
+        <a href="/produtos" style={{ padding: "6px 16px", borderRadius: 8, background: "#f3f4f6", color: "#374151", border: "none", cursor: "pointer", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+          Voltar para produtos
+        </a>
       </div>
     </div>
   );

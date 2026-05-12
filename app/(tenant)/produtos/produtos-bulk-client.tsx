@@ -140,8 +140,14 @@ function parseCsv(text: string): ParsedRow[] {
     return result;
   };
 
-  // Normaliza os headers
-  const normalizedHeaders = splitLine(lines[0]).map(normalizeHeader);
+  // Normaliza os headers.
+  // Alguns CSVs gerados pelo Excel BR colam todos os headers do modelo numa única célula
+  // separados por vírgula (ex: "nome,descricao,preco,..."). Nesse caso usamos apenas o
+  // primeiro token antes da vírgula para não perder o mapeamento da coluna.
+  const normalizedHeaders = splitLine(lines[0]).map((h) => {
+    const token = h.includes(",") ? h.split(",")[0] : h;
+    return normalizeHeader(token);
+  });
 
   const get = (row: string[], key: string) => {
     const idx = normalizedHeaders.indexOf(key);
@@ -173,7 +179,7 @@ function parseCsv(text: string): ParsedRow[] {
       preco:         isNaN(preco) ? 0 : preco,
       unidade:       get(cols, "unidade") || "un",
       categoria:     get(cols, "categoria") || undefined,
-      qtd_minima:    get(cols, "qtd_minima") ? parsePrice(get(cols, "qtd_minima")) : undefined,
+      qtd_minima:    (() => { const n = parsePrice(get(cols, "qtd_minima")); return n > 0 ? n : undefined; })(),
       validade_dias: validade && !isNaN(validadeNum!) ? validadeNum : undefined,
       ncm:           get(cols, "ncm") || undefined,
       cfop:          get(cols, "cfop") || undefined,
@@ -206,7 +212,7 @@ export function ProdutosBulkClient() {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ created: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<{ created?: number; errors?: string[]; error?: string } | null>(null);
   const [exporting, setExporting] = useState(false);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -214,12 +220,22 @@ export function ProdutosBulkClient() {
     if (!file) return;
     setFileName(file.name);
     setResult(null);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      setRows(parseCsv(text));
+
+    // Tenta UTF-8 primeiro; se houver chars de substituição (arquivo é Windows-1252/Excel BR),
+    // relê com a codificação correta.
+    const doRead = (encoding: string) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        if (encoding === "utf-8" && text.includes("�")) {
+          doRead("windows-1252");
+          return;
+        }
+        setRows(parseCsv(text));
+      };
+      reader.readAsText(file, encoding);
     };
-    reader.readAsText(file, "utf-8");
+    doRead("utf-8");
   }
 
   async function handleImport() {
@@ -232,9 +248,25 @@ export function ProdutosBulkClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(validRows),
       });
-      const data = await res.json();
-      setResult(data);
-      if (data.created > 0) {
+      const data = await res.json().catch(() => ({}));
+
+      // Normaliza a resposta para a forma esperada pela UI
+      // API pode retornar:
+      //  - sucesso: { created, errors }
+      //  - 401/403/400: { error: string | objeto }
+      const normalized = {
+        created: typeof data.created === "number" ? data.created : 0,
+        errors: Array.isArray(data.errors)
+          ? data.errors
+          : data.error
+            ? [typeof data.error === "string" ? data.error : JSON.stringify(data.error)]
+            : !res.ok
+              ? [`Erro ${res.status}: falha na importação.`]
+              : [],
+      };
+
+      setResult(normalized);
+      if (normalized.created > 0) {
         // Hard reload — mais confiável que router.refresh() após inserção em lote
         setTimeout(() => window.location.reload(), 1500);
       }
@@ -410,29 +442,33 @@ export function ProdutosBulkClient() {
             )}
 
             {/* Import result */}
-            {result && (
-              <div className={`mt-4 rounded-xl p-4 ${result.created > 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-                <div className="flex items-start gap-2">
-                  {result.created > 0
-                    ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-                    : <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-                  }
-                  <div>
-                    <p className={`font-semibold text-sm ${result.created > 0 ? "text-green-800" : "text-red-700"}`}>
-                      {result.created > 0
-                        ? `${result.created} produto${result.created !== 1 ? "s" : ""} importado${result.created !== 1 ? "s" : ""} com sucesso!`
-                        : "Nenhum produto importado."
-                      }
-                    </p>
-                    {result.errors.length > 0 && (
-                      <ul className="mt-1 space-y-0.5 text-xs text-red-600">
-                        {result.errors.slice(0, 5).map((e, i) => <li key={i}>• {e}</li>)}
-                      </ul>
-                    )}
+            {result && (() => {
+              const created = result.created ?? 0;
+              const errors  = result.errors  ?? [];
+              return (
+                <div className={`mt-4 rounded-xl p-4 ${created > 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                  <div className="flex items-start gap-2">
+                    {created > 0
+                      ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+                      : <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                    }
+                    <div>
+                      <p className={`font-semibold text-sm ${created > 0 ? "text-green-800" : "text-red-700"}`}>
+                        {created > 0
+                          ? `${created} produto${created !== 1 ? "s" : ""} importado${created !== 1 ? "s" : ""} com sucesso!`
+                          : "Nenhum produto importado."
+                        }
+                      </p>
+                      {errors.length > 0 && (
+                        <ul className="mt-1 space-y-0.5 text-xs text-red-600">
+                          {errors.slice(0, 5).map((e, i) => <li key={i}>• {e}</li>)}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Footer actions */}
             <div className="mt-5 flex items-center justify-end gap-3">
@@ -460,7 +496,7 @@ export function ProdutosBulkClient() {
                   )}
                 </Button>
               )}
-              {result && result.created > 0 && (
+              {result && (result.created ?? 0) > 0 && (
                 <Button onClick={() => { reset(); setResult(null); }}>
                   Importar mais
                 </Button>
