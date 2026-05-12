@@ -13,14 +13,28 @@ interface ParsedRow {
   categoria?: string;
   qtd_minima?: number;
   validade_dias?: number;
+  preco_pacote?: number;
+  rotulo_pacote?: string;
+  preco_caixa?: number;
+  rotulo_caixa?: string;
   ncm?: string;
   cfop?: string;
   ativo: boolean;
   _error?: string;
 }
 
-const TEMPLATE_HEADERS = ["nome", "descricao", "preco", "unidade", "categoria", "qtd_minima", "validade_dias", "ncm", "cfop", "ativo"];
-const TEMPLATE_EXAMPLE = ["Pão Francês", "Pão francês tradicional", "0.85", "un", "Pães", "1", "", "", "5102", "sim"];
+const TEMPLATE_HEADERS = [
+  "nome", "descricao", "preco", "unidade", "categoria",
+  "qtd_minima", "validade_dias",
+  "preco_pacote", "rotulo_pacote", "preco_caixa", "rotulo_caixa",
+  "ncm", "cfop", "ativo",
+];
+const TEMPLATE_EXAMPLE = [
+  "Pão Francês", "Pão francês tradicional", "0.85", "un", "Pães",
+  "1", "",
+  "", "", "", "",
+  "", "5102", "sim",
+];
 
 /**
  * Normaliza um header CSV → chave canônica interna.
@@ -81,6 +95,25 @@ function normalizeHeader(raw: string): string {
     validade:          "validade_dias",
     dias_validade:     "validade_dias",
     shelf_life:        "validade_dias",
+    // preço pacote
+    preco_pacote:      "preco_pacote",
+    price_pacote:      "preco_pacote",
+    preco_pct:         "preco_pacote",
+    valor_pacote:      "preco_pacote",
+    // rótulo pacote
+    rotulo_pacote:     "rotulo_pacote",
+    label_pacote:      "rotulo_pacote",
+    embalagem_pacote:  "rotulo_pacote",
+    descricao_pacote:  "rotulo_pacote",
+    // preço caixa
+    preco_caixa:       "preco_caixa",
+    price_caixa:       "preco_caixa",
+    valor_caixa:       "preco_caixa",
+    // rótulo caixa
+    rotulo_caixa:      "rotulo_caixa",
+    label_caixa:       "rotulo_caixa",
+    embalagem_caixa:   "rotulo_caixa",
+    descricao_caixa:   "rotulo_caixa",
     // fiscal
     ncm:               "ncm",
     cfop:              "cfop",
@@ -181,6 +214,10 @@ function parseCsv(text: string): ParsedRow[] {
       categoria:     get(cols, "categoria") || undefined,
       qtd_minima:    (() => { const n = parsePrice(get(cols, "qtd_minima")); return n > 0 ? n : undefined; })(),
       validade_dias: validade && !isNaN(validadeNum!) ? validadeNum : undefined,
+      preco_pacote:  (() => { const n = parsePrice(get(cols, "preco_pacote")); return n > 0 ? n : undefined; })(),
+      rotulo_pacote: get(cols, "rotulo_pacote") || undefined,
+      preco_caixa:   (() => { const n = parsePrice(get(cols, "preco_caixa")); return n > 0 ? n : undefined; })(),
+      rotulo_caixa:  get(cols, "rotulo_caixa") || undefined,
       ncm:           get(cols, "ncm") || undefined,
       cfop:          get(cols, "cfop") || undefined,
       ativo,
@@ -397,8 +434,10 @@ export function ProdutosBulkClient() {
                       <tr>
                         <th className="px-3 py-2 font-medium">Nome</th>
                         <th className="px-3 py-2 font-medium">Preço</th>
-                        <th className="px-3 py-2 font-medium">Unidade</th>
+                        <th className="px-3 py-2 font-medium">Und.</th>
                         <th className="px-3 py-2 font-medium">Categoria</th>
+                        <th className="px-3 py-2 font-medium">Pacote</th>
+                        <th className="px-3 py-2 font-medium">Caixa</th>
                         <th className="px-3 py-2 font-medium">Status</th>
                       </tr>
                     </thead>
@@ -411,6 +450,14 @@ export function ProdutosBulkClient() {
                           </td>
                           <td className="px-3 py-2 text-gray-500">{row.unidade}</td>
                           <td className="px-3 py-2 text-gray-500">{row.categoria || "—"}</td>
+                          <td className="px-3 py-2 text-gray-500">
+                            {row.preco_pacote ? `R$ ${row.preco_pacote.toFixed(2)}` : "—"}
+                            {row.rotulo_pacote ? <span className="block text-xs text-gray-400">{row.rotulo_pacote}</span> : null}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500">
+                            {row.preco_caixa ? `R$ ${row.preco_caixa.toFixed(2)}` : "—"}
+                            {row.rotulo_caixa ? <span className="block text-xs text-gray-400">{row.rotulo_caixa}</span> : null}
+                          </td>
                           <td className="px-3 py-2">
                             {row._error
                               ? <span className="text-red-500" title={row._error}>⚠ erro</span>
