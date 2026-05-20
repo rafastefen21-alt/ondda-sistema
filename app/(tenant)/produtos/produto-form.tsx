@@ -26,6 +26,8 @@ type ProductData = {
   priceCaixa?: number | null;
   labelPacote?: string | null;
   labelCaixa?: string | null;
+  weightGrams?: number | null;
+  diameterCm?: number | null;
   ncm?: string | null;
   cfop?: string | null;
   imageUrl?: string | null;
@@ -98,6 +100,12 @@ export function ProdutoForm({
         ? parseFloat(fd.get("priceCaixa") as string)
         : null,
       labelCaixa: (fd.get("labelCaixa") as string) || null,
+      weightGrams: fd.get("weightGrams")
+        ? parseInt(fd.get("weightGrams") as string, 10)
+        : null,
+      diameterCm: fd.get("diameterCm")
+        ? parseFloat(fd.get("diameterCm") as string)
+        : null,
       ncm:  (fd.get("ncm")  as string) || undefined,
       cfop: (fd.get("cfop") as string) || undefined,
       imageUrl: imageUrl || undefined,
@@ -274,6 +282,34 @@ export function ProdutoForm({
                     maxLength={60}
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Dimensões físicas */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="weightGrams">Peso unitário (g)</Label>
+                <Input
+                  id="weightGrams"
+                  name="weightGrams"
+                  type="number"
+                  step="1"
+                  min="1"
+                  defaultValue={product?.weightGrams ?? ""}
+                  placeholder="Ex: 50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="diameterCm">Diâmetro (cm)</Label>
+                <Input
+                  id="diameterCm"
+                  name="diameterCm"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  defaultValue={product?.diameterCm ?? ""}
+                  placeholder="Ex: 8.5"
+                />
               </div>
             </div>
 

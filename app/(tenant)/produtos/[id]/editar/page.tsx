@@ -44,6 +44,8 @@ export default async function EditarProdutoPage({
     priceCaixa:    product.priceCaixa   != null ? Number(product.priceCaixa)  : null,
     labelPacote:   product.labelPacote  ?? null,
     labelCaixa:    product.labelCaixa   ?? null,
+    weightGrams:   product.weightGrams  ?? null,
+    diameterCm:    product.diameterCm   != null ? Number(product.diameterCm) : null,
     ncm:           product.ncm          ?? null,
     cfop:          product.cfop         ?? null,
     imageUrl:      product.imageUrl     ?? null,

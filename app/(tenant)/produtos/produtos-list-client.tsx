@@ -15,6 +15,10 @@ type Product = {
   active: boolean;
   imageUrl: string | null;
   categoryName: string | null;
+  pricePacote: number | null;
+  labelPacote: string | null;
+  weightGrams: number | null;
+  diameterCm: number | null;
 };
 
 type Category = {
@@ -253,6 +257,26 @@ export function ProdutosListClient({
                           {product.active ? "Ativo" : "Inativo"}
                         </Badge>
                       </div>
+
+                      {/* Informações extras */}
+                      {(() => {
+                        const unitQty = parseFloat(product.unit);
+                        const hasUnitPrice = !isNaN(unitQty) && unitQty > 1;
+                        const extras = [
+                          hasUnitPrice && `R$ ${(product.price / unitQty).toFixed(2)}/un`,
+                          product.weightGrams && `${product.weightGrams} g`,
+                          product.diameterCm  && `⌀ ${product.diameterCm.toFixed(1)} cm`,
+                          product.pricePacote && `Pacote: ${formatCurrency(product.pricePacote)}${product.labelPacote ? ` (${product.labelPacote})` : ""}`,
+                        ].filter(Boolean);
+                        if (!extras.length) return null;
+                        return (
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                            {extras.map((info, i) => (
+                              <span key={i} className="text-xs text-gray-400">{info as string}</span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </div>

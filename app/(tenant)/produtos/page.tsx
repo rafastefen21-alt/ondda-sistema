@@ -38,6 +38,10 @@ export default async function ProdutosPage() {
     active:       p.active,
     imageUrl:     p.imageUrl ?? null,
     categoryName: p.category?.name ?? null,
+    pricePacote:  p.pricePacote  != null ? Number(p.pricePacote) : null,
+    labelPacote:  p.labelPacote  ?? null,
+    weightGrams:  p.weightGrams  ?? null,
+    diameterCm:   p.diameterCm   != null ? Number(p.diameterCm) : null,
   }));
 
   const categoriesSimple = categories.map((c) => ({ id: c.id, name: c.name }));
