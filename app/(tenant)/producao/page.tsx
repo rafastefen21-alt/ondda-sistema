@@ -5,8 +5,8 @@ import { addDays, startOfWeek, endOfWeek, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Factory, Package, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/utils";
+import { FabricaKanban } from "./fabrica-kanban";
 
 type ProductionItem = {
   productId: string;
@@ -37,6 +37,19 @@ export default async function ProducaoPage({
   const baseDate = week ? new Date(week) : new Date();
   const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 }); // Monday
   const weekEnd = endOfWeek(baseDate, { weekStartsOn: 1 }); // Sunday
+
+  // Pedidos à fábrica para o Kanban
+  const factoryOrdersRaw = await prisma.factoryOrder.findMany({
+    where: { tenantId },
+    orderBy: [{ status: "asc" }, { position: "asc" }, { createdAt: "asc" }],
+  });
+  const factoryOrders = factoryOrdersRaw.map((o) => ({
+    ...o,
+    expectedAt: o.expectedAt ? o.expectedAt.toISOString() : null,
+    receivedAt: o.receivedAt ? o.receivedAt.toISOString() : null,
+    createdAt:  o.createdAt.toISOString(),
+    updatedAt:  o.updatedAt.toISOString(),
+  }));
 
   // Get orders in production or approved for this week
   const orders = await prisma.order.findMany({
@@ -109,7 +122,7 @@ export default async function ProducaoPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Produção da Semana
+            Demanda de Pedidos
           </h1>
           <p className="text-gray-500">
             {weekLabel} — {orders.length} pedido(s) em aberto
@@ -241,6 +254,11 @@ export default async function ProducaoPage({
           </p>
         </div>
       )}
+
+      {/* ── Kanban: Pedidos à Fábrica ── */}
+      <div className="border-t border-gray-100 pt-6">
+        <FabricaKanban initial={factoryOrders} />
+      </div>
     </div>
   );
 }
