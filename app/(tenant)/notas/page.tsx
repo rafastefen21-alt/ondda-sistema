@@ -95,15 +95,14 @@ export default async function NotasPage() {
                         DANFe
                       </a>
                     )}
-                    {invoice.xmlUrl && (
+                    {invoice.status === "EMITIDA" && invoice.focusNfeRef && (
                       <a
-                        href={invoice.xmlUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={`/api/nfe/${invoice.id}/xml`}
+                        download
                         className="flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
                       >
                         <Download className="h-3.5 w-3.5" />
-                        XML
+                        XML da NF-e
                       </a>
                     )}
                     <Link
