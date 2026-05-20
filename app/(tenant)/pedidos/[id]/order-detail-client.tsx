@@ -215,12 +215,47 @@ export function OrderDetailClient({
   const [manualMethod,   setManualMethod]   = useState("PIX");
   const [registeringPay, setRegisteringPay] = useState(false);
 
+  // Vencimento padrão para boleto: 7 dias a partir de hoje
+  const defaultBoletoVenc = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
+  const [boletoVencimento, setBoletoVencimento] = useState(defaultBoletoVenc);
+
+  /** Lança boleto como A RECEBER (PENDENTE) com a data de vencimento informada */
+  async function registerAsPending() {
+    setRegisteringPay(true);
+    try {
+      const res = await fetch("/api/pagamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId:      order.id,
+          amount:       total,
+          method:       "BOLETO",
+          installments: 1,
+          dueDate:      boletoVencimento,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error ?? "Erro ao lançar boleto."); return; }
+      setShowManualPay(false);
+      router.refresh();
+    } catch {
+      alert("Erro de conexão.");
+    } finally {
+      setRegisteringPay(false);
+    }
+  }
+
   /** Cria um pagamento manual já marcado como PAGO */
   async function registerAsPaid() {
     setRegisteringPay(true);
     try {
       // 1. Cria o registro de pagamento
       const today = new Date().toISOString().slice(0, 10);
+      const dueDate = chargeMethod === "BOLETO" ? boletoVencimento : today;
       const res = await fetch("/api/pagamentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -229,7 +264,7 @@ export function OrderDetailClient({
           amount:       total,
           method:       manualMethod,
           installments: 1,
-          dueDate:      today,
+          dueDate,
         }),
       });
       const payments = await res.json();
@@ -780,6 +815,35 @@ export function OrderDetailClient({
                         </select>
                       </div>
 
+                      {/* Campo de vencimento — visível apenas para Boleto */}
+                      {chargeMethod === "BOLETO" && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-gray-600">
+                            Vencimento do boleto
+                          </label>
+                          <input
+                            type="date"
+                            value={boletoVencimento}
+                            onChange={(e) => setBoletoVencimento(e.target.value)}
+                            className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-1"
+                          />
+                        </div>
+                      )}
+
+                      {/* Botão: Lançar como A Receber (Boleto pendente) */}
+                      {chargeMethod === "BOLETO" && (
+                        <button
+                          onClick={registerAsPending}
+                          disabled={registeringPay || !boletoVencimento}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-50 py-2.5 text-sm font-semibold text-yellow-800 transition hover:bg-yellow-100 disabled:opacity-50"
+                        >
+                          {registeringPay
+                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-yellow-700 border-t-transparent" />
+                            : <span className="text-base leading-none">$</span>}
+                          {registeringPay ? "Lançando..." : `Lançar como A Receber (vence ${boletoVencimento ? new Date(boletoVencimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"})`}
+                        </button>
+                      )}
+
                       {/* Botão: Registrar como Pago */}
                       <button
                         onClick={() => setShowManualPay(true)}
@@ -796,7 +860,10 @@ export function OrderDetailClient({
                             Confirmar pagamento manual?
                           </p>
                           <p className="text-xs text-green-700">
-                            Será registrado <strong>{formatCurrency(total)}</strong> via <strong>{PAYMENT_METHOD_LABELS[chargeMethod] ?? chargeMethod}</strong> com data de hoje.
+                            Será registrado <strong>{formatCurrency(total)}</strong> via <strong>{PAYMENT_METHOD_LABELS[chargeMethod] ?? chargeMethod}</strong>
+                            {chargeMethod === "BOLETO" && boletoVencimento
+                              ? ` com vencimento ${new Date(boletoVencimento + "T12:00:00").toLocaleDateString("pt-BR")}.`
+                              : " com data de hoje."}
                           </p>
                           <div className="flex gap-2">
                             <button
