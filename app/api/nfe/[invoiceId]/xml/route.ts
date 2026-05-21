@@ -2,18 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const FOCUS_BASE: Record<string, string> = {
-  homologacao: "https://homologacao.focusnfe.com.br/v2",
-  producao:    "https://api.focusnfe.com.br/v2",
+const FOCUS_ROOT: Record<string, string> = {
+  homologacao: "https://homologacao.focusnfe.com.br",
+  producao:    "https://api.focusnfe.com.br",
 };
 
 /**
  * GET /api/nfe/[invoiceId]/xml
  *
  * Proxy que busca o XML da NF-e na Focus NF-e (autenticação HTTP Basic)
- * e o entrega como download para o browser.
+ * e entrega ao browser como download.
  *
- * Nunca expõe o token ao cliente.
+ * Estratégia:
+ * 1. Se xmlUrl estiver salvo no banco (caminho relativo /arquivos/...) → usa direto
+ * 2. Se xmlUrl for nulo → consulta /v2/nfe/{ref} para obter caminho_xml e baixa
  */
 export async function GET(
   _req: NextRequest,
@@ -27,7 +29,6 @@ export async function GET(
   const { invoiceId } = await params;
   const { tenantId } = session.user;
 
-  // Busca a invoice garantindo que pertence ao tenant
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, tenantId },
     select: { focusNfeRef: true, xmlUrl: true, accessKey: true, number: true },
@@ -37,7 +38,6 @@ export async function GET(
     return NextResponse.json({ error: "NF-e não encontrada" }, { status: 404 });
   }
 
-  // Busca o token e ambiente do tenant
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { focusNfeToken: true, nfeAmbiente: true },
@@ -47,40 +47,49 @@ export async function GET(
     return NextResponse.json({ error: "Token Focus NF-e não configurado" }, { status: 400 });
   }
 
-  const base   = FOCUS_BASE[tenant.nfeAmbiente ?? "homologacao"] ?? FOCUS_BASE.homologacao;
+  const root   = FOCUS_ROOT[tenant.nfeAmbiente ?? "homologacao"] ?? FOCUS_ROOT.homologacao;
   const auth64 = Buffer.from(`${tenant.focusNfeToken}:`).toString("base64");
+  const headers = { Authorization: `Basic ${auth64}` };
 
-  // Monta URL do XML:
-  // 1) xmlUrl salvo no banco (caminho relativo /arquivos/... ou URL absoluta)
-  // 2) Fallback: endpoint /v2/nfe/{ref}/xml
-  let url: string;
-  if (invoice.xmlUrl) {
-    url = invoice.xmlUrl.startsWith("http")
-      ? invoice.xmlUrl
-      : `${base}${invoice.xmlUrl}`;
-  } else if (invoice.focusNfeRef) {
-    url = `${base}/v2/nfe/${invoice.focusNfeRef}/xml`;
-  } else {
-    return NextResponse.json({ error: "XML não disponível para esta NF-e" }, { status: 404 });
+  // ── Resolve o caminho do XML ──────────────────────────────────────────────────
+  let xmlPath: string | null = invoice.xmlUrl ?? null;
+
+  if (!xmlPath && invoice.focusNfeRef) {
+    // Consulta a NF-e na Focus para obter o caminho do arquivo
+    const infoUrl = `${root}/v2/nfe/${encodeURIComponent(invoice.focusNfeRef)}`;
+    console.log("[xml-proxy] consultando NF-e:", infoUrl);
+    const infoRes = await fetch(infoUrl, { headers });
+    if (infoRes.ok) {
+      const data = await infoRes.json().catch(() => ({}));
+      xmlPath = data.caminho_xml ?? null;
+      console.log("[xml-proxy] caminho_xml obtido:", xmlPath);
+    } else {
+      const body = await infoRes.text().catch(() => "");
+      console.error("[xml-proxy] erro ao consultar NF-e:", infoRes.status, body);
+      return NextResponse.json({ error: body || `Focus retornou ${infoRes.status}` }, { status: infoRes.status });
+    }
   }
 
-  console.log("[xml-proxy] fetching", url, "ambiente:", tenant.nfeAmbiente);
-
-  const focusRes = await fetch(url, {
-    headers: { Authorization: `Basic ${auth64}` },
-  });
-
-  if (!focusRes.ok) {
-    const body = await focusRes.text().catch(() => "");
-    console.error("[xml-proxy] Focus error", focusRes.status, body);
-    const msg = body || `Focus NF-e retornou status ${focusRes.status}`;
-    return NextResponse.json({ error: msg }, { status: focusRes.status });
+  if (!xmlPath) {
+    return NextResponse.json(
+      { error: "XML não disponível. Aguarde a autorização da NF-e e tente novamente." },
+      { status: 404 },
+    );
   }
 
-  const xmlText = await focusRes.text();
+  // ── Baixa o arquivo XML ───────────────────────────────────────────────────────
+  const fileUrl = xmlPath.startsWith("http") ? xmlPath : `${root}${xmlPath}`;
+  console.log("[xml-proxy] baixando:", fileUrl);
 
-  // Nome do arquivo: NFe{chave}.xml ou NF-{número}.xml
-  const chave    = invoice.accessKey?.replace(/\D/g, "") ?? "";
+  const fileRes = await fetch(fileUrl, { headers });
+  if (!fileRes.ok) {
+    const body = await fileRes.text().catch(() => "");
+    console.error("[xml-proxy] erro ao baixar XML:", fileRes.status, body);
+    return NextResponse.json({ error: body || `Erro ${fileRes.status} ao baixar XML` }, { status: fileRes.status });
+  }
+
+  const xmlText = await fileRes.text();
+  const chave   = invoice.accessKey?.replace(/\D/g, "") ?? "";
   const fileName = chave
     ? `NFe${chave}.xml`
     : `NF-${invoice.number ?? invoiceId}.xml`;

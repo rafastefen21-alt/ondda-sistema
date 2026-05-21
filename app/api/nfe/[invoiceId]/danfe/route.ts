@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const FOCUS_BASE: Record<string, string> = {
+const FOCUS_ROOT: Record<string, string> = {
   homologacao: "https://homologacao.focusnfe.com.br",
   producao:    "https://api.focusnfe.com.br",
 };
@@ -10,11 +10,12 @@ const FOCUS_BASE: Record<string, string> = {
 /**
  * GET /api/nfe/[invoiceId]/danfe
  *
- * Proxy que busca o DANFe (PDF) da NF-e na Focus NF-e com autenticação HTTP Basic
+ * Proxy que busca o DANFe (PDF) da NF-e na Focus NF-e (autenticação HTTP Basic)
  * e entrega ao browser como download.
  *
- * A Focus retorna `caminho_danfe` como path relativo (ex: /danfe/NFe123.pdf),
- * então precisamos montar a URL completa com o token do tenant.
+ * Estratégia:
+ * 1. Se pdfUrl estiver salvo no banco (caminho relativo /danfe/...) → usa direto
+ * 2. Se pdfUrl for nulo → consulta /v2/nfe/{ref} para obter caminho_danfe e baixa
  */
 export async function GET(
   _req: NextRequest,
@@ -30,7 +31,7 @@ export async function GET(
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, tenantId },
-    select: { pdfUrl: true, focusNfeRef: true, accessKey: true, number: true },
+    select: { focusNfeRef: true, pdfUrl: true, accessKey: true, number: true },
   });
 
   if (!invoice) {
@@ -46,44 +47,51 @@ export async function GET(
     return NextResponse.json({ error: "Token Focus NF-e não configurado" }, { status: 400 });
   }
 
-  const base    = FOCUS_BASE[tenant.nfeAmbiente ?? "homologacao"] ?? FOCUS_BASE.homologacao;
-  const auth64  = Buffer.from(`${tenant.focusNfeToken}:`).toString("base64");
+  const root   = FOCUS_ROOT[tenant.nfeAmbiente ?? "homologacao"] ?? FOCUS_ROOT.homologacao;
+  const auth64 = Buffer.from(`${tenant.focusNfeToken}:`).toString("base64");
+  const headers = { Authorization: `Basic ${auth64}` };
 
-  // Monta a URL do DANFe:
-  // 1) Se temos o pdfUrl salvo (caminho relativo ou absoluto), usa ele
-  // 2) Fallback: endpoint da API Focus /v2/nfe/{ref}/danfe
-  let url: string;
-  if (invoice.pdfUrl) {
-    // Se começa com "/" é caminho relativo → prefixar base
-    url = invoice.pdfUrl.startsWith("http")
-      ? invoice.pdfUrl
-      : `${base}${invoice.pdfUrl}`;
-  } else if (invoice.focusNfeRef) {
-    url = `${base}/v2/nfe/${invoice.focusNfeRef}/danfe`;
-  } else {
-    return NextResponse.json({ error: "URL do DANFe não disponível" }, { status: 404 });
+  // ── Resolve o caminho do DANFe ────────────────────────────────────────────────
+  let pdfPath: string | null = invoice.pdfUrl ?? null;
+
+  if (!pdfPath && invoice.focusNfeRef) {
+    // Consulta a NF-e na Focus para obter o caminho do arquivo
+    const infoUrl = `${root}/v2/nfe/${encodeURIComponent(invoice.focusNfeRef)}`;
+    console.log("[danfe-proxy] consultando NF-e:", infoUrl);
+    const infoRes = await fetch(infoUrl, { headers });
+    if (infoRes.ok) {
+      const data = await infoRes.json().catch(() => ({}));
+      pdfPath = data.caminho_danfe ?? null;
+      console.log("[danfe-proxy] caminho_danfe obtido:", pdfPath);
+    } else {
+      const body = await infoRes.text().catch(() => "");
+      console.error("[danfe-proxy] erro ao consultar NF-e:", infoRes.status, body);
+      return NextResponse.json({ error: body || `Focus retornou ${infoRes.status}` }, { status: infoRes.status });
+    }
   }
 
-  console.log("[danfe-proxy] fetching", url);
-
-  const focusRes = await fetch(url, {
-    headers: { Authorization: `Basic ${auth64}` },
-  });
-
-  if (!focusRes.ok) {
-    const body = await focusRes.text().catch(() => "");
-    console.error("[danfe-proxy] Focus error", focusRes.status, body);
+  if (!pdfPath) {
     return NextResponse.json(
-      { error: `Focus NF-e retornou status ${focusRes.status}` },
-      { status: focusRes.status },
+      { error: "DANFe não disponível. Aguarde a autorização da NF-e e tente novamente." },
+      { status: 404 },
     );
   }
 
-  const buffer = await focusRes.arrayBuffer();
+  // ── Baixa o arquivo PDF ───────────────────────────────────────────────────────
+  const fileUrl = pdfPath.startsWith("http") ? pdfPath : `${root}${pdfPath}`;
+  console.log("[danfe-proxy] baixando:", fileUrl);
 
-  const chave    = invoice.accessKey?.replace(/\D/g, "") ?? "";
+  const fileRes = await fetch(fileUrl, { headers });
+  if (!fileRes.ok) {
+    const body = await fileRes.text().catch(() => "");
+    console.error("[danfe-proxy] erro ao baixar DANFe:", fileRes.status, body);
+    return NextResponse.json({ error: body || `Erro ${fileRes.status} ao baixar DANFe` }, { status: fileRes.status });
+  }
+
+  const buffer  = await fileRes.arrayBuffer();
+  const chave   = invoice.accessKey?.replace(/\D/g, "") ?? "";
   const fileName = chave
-    ? `DANFe-${chave}.pdf`
+    ? `DANFe${chave}.pdf`
     : `DANFe-${invoice.number ?? invoiceId}.pdf`;
 
   return new NextResponse(buffer, {
