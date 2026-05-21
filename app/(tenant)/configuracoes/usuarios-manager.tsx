@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Plus, Shield, Wrench, UserCog, X, Check, ToggleLeft, ToggleRight } from "lucide-react";
+import { Users, Plus, Shield, Wrench, UserCog, X, Check, ToggleLeft, ToggleRight, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,12 +41,130 @@ const ROLE_DESC: Record<Role, string> = {
   OPERADOR:     "Move pedidos em produção/entrega",
 };
 
+// ── Modal de alteração de senha ────────────────────────────────────────────────
+
+function PasswordModal({
+  user,
+  onClose,
+}: {
+  user: User;
+  onClose: () => void;
+}) {
+  const [password, setPassword]       = useState("");
+  const [confirm, setConfirm]         = useState("");
+  const [showPass, setShowPass]       = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState("");
+  const [success, setSuccess]         = useState(false);
+
+  async function handleSave() {
+    setError("");
+    if (password.length < 6) { setError("A senha deve ter no mínimo 6 caracteres."); return; }
+    if (password !== confirm) { setError("As senhas não coincidem."); return; }
+
+    setSaving(true);
+    const res = await fetch(`/api/usuarios/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    setSaving(false);
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setError(json.error ?? "Erro ao alterar senha.");
+      return;
+    }
+    setSuccess(true);
+    setTimeout(onClose, 1200);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Alterar senha</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{user.name ?? user.email}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {success ? (
+          <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+            <Check className="h-4 w-4" /> Senha alterada com sucesso!
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nova senha</Label>
+              <div className="relative">
+                <input
+                  autoFocus
+                  type={showPass ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Confirmar nova senha</Label>
+              <div className="relative">
+                <input
+                  type={showConfirm ? "text" : "password"}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Repita a senha"
+                  className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && <p className="text-xs text-red-600">{error}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <Button onClick={handleSave} disabled={saving || !password || !confirm} className="flex-1">
+                {saving ? "Salvando..." : "Salvar senha"}
+              </Button>
+              <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Componente principal ───────────────────────────────────────────────────────
+
 export function UsuariosManager({ initial, currentUserId }: { initial: User[]; currentUserId: string }) {
-  const [users, setUsers] = useState<User[]>(initial);
+  const [users, setUsers]       = useState<User[]>(initial);
   const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "GERENTE" as Role });
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+  const [form, setForm]         = useState({ name: "", email: "", password: "", role: "GERENTE" as Role });
+  const [changingPasswordFor, setChangingPasswordFor] = useState<User | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -103,153 +221,172 @@ export function UsuariosManager({ initial, currentUserId }: { initial: User[]; c
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-blue-700" />
-            Usuários Internos
-          </CardTitle>
-          <Button size="sm" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {showForm ? "Cancelar" : "Novo usuário"}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-
-        {/* Role legend */}
-        <div className="grid gap-2 rounded-lg bg-gray-50 p-3 sm:grid-cols-3">
-          {(["TENANT_ADMIN", "GERENTE", "OPERADOR"] as Role[]).map((r) => (
-            <div key={r} className="flex items-start gap-2">
-              <span className={`mt-0.5 flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[r]}`}>
-                {ROLE_ICONS[r]}
-                {ROLE_LABELS[r]}
-              </span>
-              <p className="text-xs text-gray-400">{ROLE_DESC[r]}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Create form */}
-        {showForm && (
-          <form onSubmit={handleCreate} className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
-            <p className="text-sm font-semibold text-amber-900">Novo usuário interno</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="u-name">Nome *</Label>
-                <Input
-                  id="u-name"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Ex: Carlos Silva"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="u-email">Email *</Label>
-                <Input
-                  id="u-email"
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="carlos@casadopao.com.br"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="u-password">Senha inicial *</Label>
-                <Input
-                  id="u-password"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="Mínimo 6 caracteres"
-                  minLength={6}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="u-role">Função *</Label>
-                <select
-                  id="u-role"
-                  value={form.role}
-                  onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
-                  className={selectClass}
-                >
-                  <option value="GERENTE">Gerente</option>
-                  <option value="OPERADOR">Operador</option>
-                  <option value="TENANT_ADMIN">Administrador</option>
-                </select>
-              </div>
-            </div>
-            {error && (
-              <p className="text-sm text-red-600">{error}</p>
-            )}
-            <Button type="submit" disabled={loading}>
-              <Check className="h-4 w-4" />
-              {loading ? "Criando..." : "Criar usuário"}
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-700" />
+              Usuários Internos
+            </CardTitle>
+            <Button size="sm" onClick={() => setShowForm((v) => !v)}>
+              {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {showForm ? "Cancelar" : "Novo usuário"}
             </Button>
-          </form>
-        )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
 
-        {/* User list */}
-        <div className="divide-y divide-gray-100">
-          {users.map((user) => {
-            const isSelf = user.id === currentUserId;
-            return (
-              <div key={user.id} className={`flex items-center gap-3 py-3 ${!user.active ? "opacity-50" : ""}`}>
-                {/* Avatar */}
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900">
-                  {user.name?.charAt(0).toUpperCase() ?? "U"}
-                </div>
-
-                {/* Info */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium text-gray-900">{user.name}</p>
-                    {isSelf && (
-                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">você</span>
-                    )}
-                    {!user.active && (
-                      <Badge variant="secondary" className="text-xs">Inativo</Badge>
-                    )}
-                  </div>
-                  <p className="truncate text-xs text-gray-400">{user.email}</p>
-                </div>
-
-                {/* Role selector */}
-                <select
-                  value={user.role}
-                  disabled={isSelf}
-                  onChange={(e) => handleRoleChange(user.id, e.target.value as Role)}
-                  className={`rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60 ${ROLE_COLORS[user.role]}`}
-                >
-                  <option value="TENANT_ADMIN">Administrador</option>
-                  <option value="GERENTE">Gerente</option>
-                  <option value="OPERADOR">Operador</option>
-                </select>
-
-                {/* Active toggle */}
-                <button
-                  disabled={isSelf}
-                  onClick={() => handleToggleActive(user.id, !user.active)}
-                  title={user.active ? "Desativar acesso" : "Ativar acesso"}
-                  className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {user.active
-                    ? <ToggleRight className="h-5 w-5 text-green-500" />
-                    : <ToggleLeft className="h-5 w-5" />
-                  }
-                </button>
+          {/* Role legend */}
+          <div className="grid gap-2 rounded-lg bg-gray-50 p-3 sm:grid-cols-3">
+            {(["TENANT_ADMIN", "GERENTE", "OPERADOR"] as Role[]).map((r) => (
+              <div key={r} className="flex items-start gap-2">
+                <span className={`mt-0.5 flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[r]}`}>
+                  {ROLE_ICONS[r]}
+                  {ROLE_LABELS[r]}
+                </span>
+                <p className="text-xs text-gray-400">{ROLE_DESC[r]}</p>
               </div>
-            );
-          })}
-          {users.length === 0 && (
-            <p className="py-6 text-center text-sm text-gray-400">Nenhum usuário interno cadastrado.</p>
+            ))}
+          </div>
+
+          {/* Create form */}
+          {showForm && (
+            <form onSubmit={handleCreate} className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-900">Novo usuário interno</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="u-name">Nome *</Label>
+                  <Input
+                    id="u-name"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="Ex: Carlos Silva"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="u-email">Email *</Label>
+                  <Input
+                    id="u-email"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="carlos@casadopao.com.br"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="u-password">Senha inicial *</Label>
+                  <Input
+                    id="u-password"
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="Mínimo 6 caracteres"
+                    minLength={6}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="u-role">Função *</Label>
+                  <select
+                    id="u-role"
+                    value={form.role}
+                    onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
+                    className={selectClass}
+                  >
+                    <option value="GERENTE">Gerente</option>
+                    <option value="OPERADOR">Operador</option>
+                    <option value="TENANT_ADMIN">Administrador</option>
+                  </select>
+                </div>
+              </div>
+              {error && (
+                <p className="text-sm text-red-600">{error}</p>
+              )}
+              <Button type="submit" disabled={loading}>
+                <Check className="h-4 w-4" />
+                {loading ? "Criando..." : "Criar usuário"}
+              </Button>
+            </form>
           )}
-        </div>
-      </CardContent>
-    </Card>
+
+          {/* User list */}
+          <div className="divide-y divide-gray-100">
+            {users.map((user) => {
+              const isSelf = user.id === currentUserId;
+              return (
+                <div key={user.id} className={`flex items-center gap-3 py-3 ${!user.active ? "opacity-50" : ""}`}>
+                  {/* Avatar */}
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900">
+                    {user.name?.charAt(0).toUpperCase() ?? "U"}
+                  </div>
+
+                  {/* Info */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium text-gray-900">{user.name}</p>
+                      {isSelf && (
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">você</span>
+                      )}
+                      {!user.active && (
+                        <Badge variant="secondary" className="text-xs">Inativo</Badge>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-gray-400">{user.email}</p>
+                  </div>
+
+                  {/* Role selector */}
+                  <select
+                    value={user.role}
+                    disabled={isSelf}
+                    onChange={(e) => handleRoleChange(user.id, e.target.value as Role)}
+                    className={`rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60 ${ROLE_COLORS[user.role]}`}
+                  >
+                    <option value="TENANT_ADMIN">Administrador</option>
+                    <option value="GERENTE">Gerente</option>
+                    <option value="OPERADOR">Operador</option>
+                  </select>
+
+                  {/* Change password */}
+                  <button
+                    onClick={() => setChangingPasswordFor(user)}
+                    title="Alterar senha"
+                    className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-yellow-50 hover:text-yellow-600"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </button>
+
+                  {/* Active toggle */}
+                  <button
+                    disabled={isSelf}
+                    onClick={() => handleToggleActive(user.id, !user.active)}
+                    title={user.active ? "Desativar acesso" : "Ativar acesso"}
+                    className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {user.active
+                      ? <ToggleRight className="h-5 w-5 text-green-500" />
+                      : <ToggleLeft className="h-5 w-5" />
+                    }
+                  </button>
+                </div>
+              );
+            })}
+            {users.length === 0 && (
+              <p className="py-6 text-center text-sm text-gray-400">Nenhum usuário interno cadastrado.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Modal alterar senha */}
+      {changingPasswordFor && (
+        <PasswordModal
+          user={changingPasswordFor}
+          onClose={() => setChangingPasswordFor(null)}
+        />
+      )}
+    </>
   );
 }
