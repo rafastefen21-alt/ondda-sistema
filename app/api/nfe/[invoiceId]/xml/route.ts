@@ -61,8 +61,9 @@ export async function GET(
     const infoRes = await fetch(infoUrl, { headers });
     if (infoRes.ok) {
       const data = await infoRes.json().catch(() => ({}));
-      xmlPath = data.caminho_xml ?? null;
-      console.log("[xml-proxy] caminho_xml obtido:", xmlPath);
+      // Focus pode retornar caminho_xml_nota_fiscal ou caminho_xml
+      xmlPath = data.caminho_xml_nota_fiscal ?? data.caminho_xml ?? null;
+      console.log("[xml-proxy] caminho obtido:", xmlPath, "| dados:", JSON.stringify(data).slice(0, 300));
     } else {
       const body = await infoRes.text().catch(() => "");
       console.error("[xml-proxy] erro ao consultar NF-e:", infoRes.status, body);

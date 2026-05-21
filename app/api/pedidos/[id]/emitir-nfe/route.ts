@@ -199,7 +199,7 @@ export async function POST(
       status:    mapFocusStatus(focusData.status),
       number:    focusData.numero      ?? null,
       accessKey: focusData.chave_nfe   ?? null,
-      xmlUrl:    focusData.caminho_xml  ?? null,
+      xmlUrl:    focusData.caminho_xml_nota_fiscal ?? focusData.caminho_xml ?? null,
       pdfUrl:    focusData.caminho_danfe ?? null,
       issuedAt:  focusData.data_emissao
         ? new Date(focusData.data_emissao)
@@ -267,7 +267,7 @@ export async function GET(
             status:    mappedStatus,
             number:    data.numero       ?? inv.number,
             accessKey: data.chave_nfe    ?? inv.accessKey,
-            xmlUrl:    data.caminho_xml   ?? inv.xmlUrl,
+            xmlUrl:    data.caminho_xml_nota_fiscal ?? data.caminho_xml ?? inv.xmlUrl,
             pdfUrl:    data.caminho_danfe ?? inv.pdfUrl,
             issuedAt:  data.data_emissao
               ? new Date(data.data_emissao)
