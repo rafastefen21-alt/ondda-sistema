@@ -51,40 +51,18 @@ export async function GET(
   const auth64 = Buffer.from(`${tenant.focusNfeToken}:`).toString("base64");
   const headers = { Authorization: `Basic ${auth64}` };
 
-  // ── Resolve o caminho do DANFe ────────────────────────────────────────────────
-  let pdfPath: string | null = invoice.pdfUrl ?? null;
-
-  if (!pdfPath && invoice.focusNfeRef) {
-    // Consulta a NF-e na Focus para obter o caminho do arquivo
-    const infoUrl = `${root}/v2/nfe/${encodeURIComponent(invoice.focusNfeRef)}`;
-    console.log("[danfe-proxy] consultando NF-e:", infoUrl);
-    const infoRes = await fetch(infoUrl, { headers });
-    if (infoRes.ok) {
-      const data = await infoRes.json().catch(() => ({}));
-      pdfPath = data.caminho_danfe ?? null;
-      console.log("[danfe-proxy] caminho_danfe obtido:", pdfPath);
-    } else {
-      const body = await infoRes.text().catch(() => "");
-      console.error("[danfe-proxy] erro ao consultar NF-e:", infoRes.status, body);
-      return NextResponse.json({ error: body || `Focus retornou ${infoRes.status}` }, { status: infoRes.status });
-    }
+  if (!invoice.focusNfeRef) {
+    return NextResponse.json({ error: "Referência da NF-e não encontrada" }, { status: 404 });
   }
 
-  if (!pdfPath) {
-    return NextResponse.json(
-      { error: "DANFe não disponível. Aguarde a autorização da NF-e e tente novamente." },
-      { status: 404 },
-    );
-  }
+  // Endpoint correto da Focus para PDF do DANFe
+  const fileUrl = `${root}/v2/nfe/${encodeURIComponent(invoice.focusNfeRef)}/danfe`;
+  console.log("[danfe-proxy] baixando PDF:", fileUrl);
 
-  // ── Baixa o arquivo PDF ───────────────────────────────────────────────────────
-  const fileUrl = pdfPath.startsWith("http") ? pdfPath : `${root}${pdfPath}`;
-  console.log("[danfe-proxy] baixando:", fileUrl);
-
-  const fileRes = await fetch(fileUrl, { headers });
+  const fileRes = await fetch(fileUrl, { headers, redirect: "follow" });
   if (!fileRes.ok) {
     const body = await fileRes.text().catch(() => "");
-    console.error("[danfe-proxy] erro ao baixar DANFe:", fileRes.status, body);
+    console.error("[danfe-proxy] erro:", fileRes.status, body);
     return NextResponse.json({ error: body || `Erro ${fileRes.status} ao baixar DANFe` }, { status: fileRes.status });
   }
 
