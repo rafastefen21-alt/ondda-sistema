@@ -528,7 +528,11 @@ export function LojaClient({
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((product) => {
-            const tiers = tiersOf(product);
+            const allTiers = tiersOf(product);
+            // Mostra só pacote e caixa; fallback para unidade se nenhum existe
+            const tiers = allTiers.filter((t) => t.tier !== "unidade").length > 0
+              ? allTiers.filter((t) => t.tier !== "unidade")
+              : allTiers;
             return (
               <div
                 key={product.id}
