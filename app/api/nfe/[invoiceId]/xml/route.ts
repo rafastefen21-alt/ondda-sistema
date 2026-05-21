@@ -30,10 +30,10 @@ export async function GET(
   // Busca a invoice garantindo que pertence ao tenant
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, tenantId },
-    select: { focusNfeRef: true, accessKey: true, number: true },
+    select: { focusNfeRef: true, xmlUrl: true, accessKey: true, number: true },
   });
 
-  if (!invoice?.focusNfeRef) {
+  if (!invoice) {
     return NextResponse.json({ error: "NF-e não encontrada" }, { status: 404 });
   }
 
@@ -47,16 +47,33 @@ export async function GET(
     return NextResponse.json({ error: "Token Focus NF-e não configurado" }, { status: 400 });
   }
 
-  const base = FOCUS_BASE[tenant.nfeAmbiente ?? "homologacao"] ?? FOCUS_BASE.homologacao;
-  const url  = `${base}/nfe/${encodeURIComponent(invoice.focusNfeRef)}/xml`;
+  const base   = FOCUS_BASE[tenant.nfeAmbiente ?? "homologacao"] ?? FOCUS_BASE.homologacao;
   const auth64 = Buffer.from(`${tenant.focusNfeToken}:`).toString("base64");
+
+  // Monta URL do XML:
+  // 1) xmlUrl salvo no banco (caminho relativo /arquivos/... ou URL absoluta)
+  // 2) Fallback: endpoint /v2/nfe/{ref}/xml
+  let url: string;
+  if (invoice.xmlUrl) {
+    url = invoice.xmlUrl.startsWith("http")
+      ? invoice.xmlUrl
+      : `${base}${invoice.xmlUrl}`;
+  } else if (invoice.focusNfeRef) {
+    url = `${base}/v2/nfe/${invoice.focusNfeRef}/xml`;
+  } else {
+    return NextResponse.json({ error: "XML não disponível para esta NF-e" }, { status: 404 });
+  }
+
+  console.log("[xml-proxy] fetching", url, "ambiente:", tenant.nfeAmbiente);
 
   const focusRes = await fetch(url, {
     headers: { Authorization: `Basic ${auth64}` },
   });
 
   if (!focusRes.ok) {
-    const msg = await focusRes.text().catch(() => "Erro ao buscar XML na Focus NF-e");
+    const body = await focusRes.text().catch(() => "");
+    console.error("[xml-proxy] Focus error", focusRes.status, body);
+    const msg = body || `Focus NF-e retornou status ${focusRes.status}`;
     return NextResponse.json({ error: msg }, { status: focusRes.status });
   }
 

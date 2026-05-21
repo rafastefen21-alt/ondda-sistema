@@ -216,12 +216,13 @@ export function OrderDetailClient({
   const [registeringPay, setRegisteringPay] = useState(false);
 
   // Vencimento padrão para boleto: 7 dias a partir de hoje
-  const defaultBoletoVenc = (() => {
+  // Inicializado vazio para evitar hydration mismatch (server x client timezone)
+  const [boletoVencimento, setBoletoVencimento] = useState("");
+  useEffect(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
-  })();
-  const [boletoVencimento, setBoletoVencimento] = useState(defaultBoletoVenc);
+    setBoletoVencimento(d.toISOString().slice(0, 10));
+  }, []);
 
   /** Lança boleto como A RECEBER (PENDENTE) com a data de vencimento informada */
   async function registerAsPending() {
@@ -1138,29 +1139,74 @@ export function OrderDetailClient({
                           </>
                         )}
 
-                        {/* DANFe */}
-                        {inv.pdfUrl && (
-                          <a
-                            href={inv.pdfUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                        {/* DANFe — proxy server-side (não expõe o token) */}
+                        {inv.status === "EMITIDA" && (inv.pdfUrl || inv.focusNfeRef) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/nfe/${inv.id}/danfe`);
+                                if (!res.ok) {
+                                  const body = await res.text();
+                                  let msg = "Erro ao buscar DANFe";
+                                  try { msg = JSON.parse(body).error ?? msg; } catch { /* raw */ }
+                                  alert(msg);
+                                  return;
+                                }
+                                const blob = await res.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = blobUrl;
+                                const cd = res.headers.get("Content-Disposition");
+                                const match = cd?.match(/filename="([^"]+)"/);
+                                a.download = match?.[1] ?? `DANFe-${inv.id}.pdf`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(blobUrl);
+                              } catch {
+                                alert("Erro de conexão ao baixar o DANFe.");
+                              }
+                            }}
                             className="flex items-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 py-1.5 text-xs font-medium text-green-700 transition hover:bg-green-50"
                           >
                             <Download className="h-3.5 w-3.5" />
                             DANFe (PDF)
-                          </a>
+                          </button>
                         )}
 
                         {/* XML da NF-e — proxy server-side (não expõe o token) */}
-                        {inv.status === "EMITIDA" && inv.focusNfeRef && (
-                          <a
-                            href={`/api/nfe/${inv.id}/xml`}
-                            download
+                        {inv.status === "EMITIDA" && (inv.focusNfeRef || inv.xmlUrl) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/nfe/${inv.id}/xml`);
+                                if (!res.ok) {
+                                  const body = await res.text();
+                                  let msg = "Erro ao buscar XML da NF-e";
+                                  try { msg = JSON.parse(body).error ?? msg; } catch { /* raw text */ }
+                                  alert(msg);
+                                  return;
+                                }
+                                const blob = await res.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = blobUrl;
+                                const cd = res.headers.get("Content-Disposition");
+                                const match = cd?.match(/filename="([^"]+)"/);
+                                a.download = match?.[1] ?? `NFe-${inv.id}.xml`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(blobUrl);
+                              } catch {
+                                alert("Erro de conexão ao baixar o XML.");
+                              }
+                            }}
                             className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
                           >
                             <Download className="h-3.5 w-3.5" />
                             XML da NF-e
-                          </a>
+                          </button>
                         )}
 
                         {/* Cancelar NF-e */}

@@ -121,7 +121,7 @@ export default async function ProducaoPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-lg font-bold text-gray-900">
             Demanda de Pedidos
           </h1>
           <p className="text-gray-500">
@@ -196,7 +196,7 @@ export default async function ProducaoPage({
 
           {/* Orders table */}
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
+            <h2 className="mb-4 text-lg font-bold text-gray-900">
               Pedidos da Semana
             </h2>
             <Card>
