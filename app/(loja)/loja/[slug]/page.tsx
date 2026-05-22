@@ -20,8 +20,8 @@ export async function generateMetadata({
 
   const title       = `${tenant.name} — Faça seu pedido`;
   const description = tenant.lojaDescricao ?? `Pedidos online para ${tenant.name}. Rápido e fácil.`;
-  // WhatsApp usa og:image — preferência: banner (mais largo), fallback: logo
-  const image       = tenant.lojaBannerUrl ?? tenant.lojaLogoUrl ?? null;
+  // WhatsApp usa og:image — preferência: logo, fallback: banner
+  const image       = tenant.lojaLogoUrl ?? tenant.lojaBannerUrl ?? null;
   const url         = `https://ondda-sistema.vercel.app/loja/${slug}`;
 
   return {
