@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,6 +66,7 @@ export function ClienteForm({
   const [ie,   setIe]   = useState(client?.ie   ?? "");
   // Erros de validação NF-e por campo
   const [nfeErrors, setNfeErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   function maskCep(raw: string): string {
     const d = raw.replace(/\D/g, "").slice(0, 8);
@@ -235,12 +236,24 @@ export function ClienteForm({
                 <Label htmlFor="password">
                   {mode === "create" ? "Senha de acesso *" : "Nova senha"}
                 </Label>
-                <Input
-                  id="password" name="password" type="password"
-                  placeholder={mode === "create" ? "Mínimo 6 caracteres" : "Deixe em branco para manter a atual"}
-                  minLength={6}
-                  required={mode === "create"}
-                />
+                <div className="relative">
+                  <Input
+                    id="password" name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder={mode === "create" ? "Mínimo 6 caracteres" : "Deixe em branco para manter a atual"}
+                    minLength={6}
+                    required={mode === "create"}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 
