@@ -10,13 +10,21 @@ const itemSchema = z.object({
 });
 
 const novoSchema = z.object({
-  type: z.literal("novo"),
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
-  phone: z.string().optional(),
-  cnpj: z.string().optional(),
-  notes: z.string().optional(),
+  type:        z.literal("novo"),
+  name:        z.string().min(1),
+  email:       z.string().email(),
+  password:    z.string().min(6),
+  phone:       z.string().optional(),
+  cnpj:        z.string().optional(),
+  notes:       z.string().optional(),
+  // Endereço
+  cep:         z.string().optional(),
+  logradouro:  z.string().optional(),
+  numero:      z.string().optional(),
+  complemento: z.string().optional(),
+  bairro:      z.string().optional(),
+  city:        z.string().optional(),
+  state:       z.string().optional(),
   items: z.array(itemSchema).min(1),
 });
 
@@ -81,10 +89,19 @@ export async function POST(
     const passwordHash = await bcrypt.hash(data.password, 10);
     const newUser = await prisma.user.create({
       data: {
-        tenantId: tenant.id,
-        name: data.name,
-        email: data.email,
-        password: passwordHash,
+        tenantId:    tenant.id,
+        name:        data.name,
+        email:       data.email,
+        password:    passwordHash,
+        phone:       data.phone       || null,
+        cnpj:        data.cnpj        || null,
+        cep:         data.cep         || null,
+        logradouro:  data.logradouro  || null,
+        numero:      data.numero      || null,
+        complemento: data.complemento || null,
+        bairro:      data.bairro      || null,
+        city:        data.city        || null,
+        state:       data.state       || null,
         role: "CLIENTE",
       },
     });
