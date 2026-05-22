@@ -1,6 +1,48 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { Metadata } from "next";
 import { LojaClient } from "./loja-client";
+
+// ── Open Graph / WhatsApp preview ────────────────────────────────────────────
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug, active: true },
+    select: { name: true, slug: true, lojaLogoUrl: true, lojaBannerUrl: true, lojaDescricao: true },
+  });
+
+  if (!tenant) return {};
+
+  const title       = `${tenant.name} — Faça seu pedido`;
+  const description = tenant.lojaDescricao ?? `Pedidos online para ${tenant.name}. Rápido e fácil.`;
+  // WhatsApp usa og:image — preferência: banner (mais largo), fallback: logo
+  const image       = tenant.lojaBannerUrl ?? tenant.lojaLogoUrl ?? null;
+  const url         = `https://ondda-sistema.vercel.app/loja/${slug}`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: tenant.name,
+      type: "website",
+      ...(image ? { images: [{ url: image, width: 1200, height: 630, alt: tenant.name }] } : {}),
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(image ? { images: [image] } : {}),
+    },
+  };
+}
 
 export default async function LojaPage({
   params,
