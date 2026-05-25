@@ -114,12 +114,14 @@ export function LoginForm() {
               {loading ? "Entrando..." : "Entrar"}
             </Button>
 
-            <p className="text-center text-sm text-gray-500">
-              Não tem conta?{" "}
-              <Link href="/cadastro" className="font-medium text-blue-800 hover:text-blue-900">
-                Criar minha distribuidora
+            <div className="flex items-center justify-between text-sm">
+              <Link href="/esqueci-senha" className="text-gray-500 hover:text-blue-800">
+                Esqueci minha senha
               </Link>
-            </p>
+              <Link href="/cadastro" className="font-medium text-blue-800 hover:text-blue-900">
+                Criar conta
+              </Link>
+            </div>
           </form>
         </div>
 

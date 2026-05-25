@@ -195,6 +195,77 @@ function orderStatusHtml(data: OrderEmailData): string {
 </html>`;
 }
 
+// ─── Template reset de senha ─────────────────────────────────────────────────
+
+function resetPasswordHtml(name: string, resetUrl: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0"
+             style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;max-width:520px;width:100%;">
+        <tr>
+          <td style="background:#1e40af;padding:24px 32px;text-align:center;">
+            <p style="margin:0;font-size:18px;font-weight:700;color:#fff;">Ondda</p>
+            <p style="margin:4px 0 0;font-size:13px;color:#bfdbfe;">Redefinição de senha</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            <p style="margin:0 0 12px;font-size:15px;color:#374151;">Olá, <strong>${name}</strong>!</p>
+            <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">
+              Recebemos uma solicitação para redefinir a senha da sua conta.<br>
+              Clique no botão abaixo para criar uma nova senha. O link é válido por <strong>1 hora</strong>.
+            </p>
+            <p style="text-align:center;margin:0 0 24px;">
+              <a href="${resetUrl}"
+                 style="display:inline-block;background:#1e40af;color:#fff;text-decoration:none;
+                        font-size:14px;font-weight:600;padding:14px 32px;border-radius:8px;">
+                Redefinir minha senha
+              </a>
+            </p>
+            <p style="margin:0;font-size:12px;color:#9ca3af;">
+              Se você não solicitou a redefinição, ignore este email. Sua senha permanece a mesma.<br><br>
+              Ou copie este link: <a href="${resetUrl}" style="color:#1e40af;">${resetUrl}</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;">© Ondda Sistema de Gestão</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendPasswordResetEmail(
+  to: string,
+  name: string,
+  resetUrl: string,
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[EMAIL] RESEND_API_KEY não configurada — email não enviado.");
+    return;
+  }
+  try {
+    await getResend().emails.send({
+      from:    FROM,
+      to:      [to],
+      subject: "Redefinição de senha — Ondda",
+      html:    resetPasswordHtml(name, resetUrl),
+    });
+    console.log("[EMAIL] reset de senha enviado para", to);
+  } catch (err) {
+    console.error("[EMAIL] erro ao enviar reset:", err);
+  }
+}
+
 // ─── Função pública ───────────────────────────────────────────────────────────
 
 /**

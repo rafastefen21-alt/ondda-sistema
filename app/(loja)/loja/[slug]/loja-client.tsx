@@ -527,7 +527,17 @@ export function LojaClient({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="loginPassword">Senha *</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="loginPassword">Senha *</Label>
+                        <a
+                          href="/esqueci-senha"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-blue-700 hover:underline"
+                        >
+                          Esqueci minha senha
+                        </a>
+                      </div>
                       <Input
                         id="loginPassword"
                         type="password"
