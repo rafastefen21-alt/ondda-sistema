@@ -43,14 +43,15 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
 
-  const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  const email = parsed.data.email.toLowerCase().trim();
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return NextResponse.json({ error: "Email já cadastrado." }, { status: 409 });
 
   const user = await prisma.user.create({
     data: {
       tenantId: session.user.tenantId,
       name: parsed.data.name,
-      email: parsed.data.email,
+      email,
       password: await bcrypt.hash(parsed.data.password, 10),
       role: parsed.data.role,
     },

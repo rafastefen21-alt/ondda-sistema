@@ -382,7 +382,7 @@ export function LojaClient({
                         type="email"
                         placeholder="contato@padaria.com.br"
                         value={form.email}
-                        onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, email: e.target.value.toLowerCase() }))}
                         required
                       />
                     </div>
@@ -522,7 +522,7 @@ export function LojaClient({
                         type="email"
                         placeholder="seu@email.com.br"
                         value={form.loginEmail}
-                        onChange={(e) => setForm((f) => ({ ...f, loginEmail: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, loginEmail: e.target.value.toLowerCase() }))}
                         required
                       />
                     </div>

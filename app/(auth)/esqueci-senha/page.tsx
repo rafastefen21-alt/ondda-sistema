@@ -76,7 +76,7 @@ export default function EsqueciSenhaPage() {
                     type="email"
                     placeholder="seu@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value.toLowerCase())}
                     required
                     autoFocus
                   />

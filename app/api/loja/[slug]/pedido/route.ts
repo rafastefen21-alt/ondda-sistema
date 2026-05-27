@@ -77,8 +77,9 @@ export async function POST(
   let clientId: string;
 
   if (data.type === "novo") {
+    const emailNorm = data.email.toLowerCase().trim();
     // Check if email already exists
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
+    const existing = await prisma.user.findUnique({ where: { email: emailNorm } });
     if (existing) {
       return NextResponse.json(
         { error: "Email já cadastrado. Use a opção 'Já tenho conta'." },
@@ -91,7 +92,7 @@ export async function POST(
       data: {
         tenantId:    tenant.id,
         name:        data.name,
-        email:       data.email,
+        email:       emailNorm,
         password:    passwordHash,
         phone:       data.phone       || null,
         cnpj:        data.cnpj        || null,
@@ -109,7 +110,7 @@ export async function POST(
   } else {
     // Existing user — verify credentials
     const user = await prisma.user.findFirst({
-      where: { email: data.email, tenantId: tenant.id, role: "CLIENTE" },
+      where: { email: data.email.toLowerCase().trim(), tenantId: tenant.id, role: "CLIENTE" },
     });
 
     if (!user || !user.password) {
