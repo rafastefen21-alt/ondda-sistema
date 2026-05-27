@@ -103,7 +103,8 @@ export async function POST(
         bairro:      data.bairro      || null,
         city:        data.city        || null,
         state:       data.state       || null,
-        role: "CLIENTE",
+        role:   "CLIENTE",
+        active: false, // pendente de aprovação pelo admin
       },
     });
     clientId = newUser.id;

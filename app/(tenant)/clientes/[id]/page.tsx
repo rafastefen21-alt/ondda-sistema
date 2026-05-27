@@ -13,6 +13,7 @@ import {
   formatCurrency, formatDate,
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS,
 } from "@/lib/utils";
+import { PrecosCard } from "./precos-card";
 
 export default async function ClienteDetailPage({
   params,
@@ -27,19 +28,34 @@ export default async function ClienteDetailPage({
 
   const { id } = await params;
 
-  const client = await prisma.user.findFirst({
-    where: { id, tenantId, role: "CLIENTE" },
-    include: {
-      orders: {
-        include: {
-          items:    { include: { product: { select: { name: true } } } },
-          payments: { select: { amount: true, status: true } },
+  const [client, products, customPrices] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id, tenantId, role: "CLIENTE" },
+      include: {
+        orders: {
+          include: {
+            items:    { include: { product: { select: { name: true } } } },
+            payments: { select: { amount: true, status: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 20,
         },
-        orderBy: { createdAt: "desc" },
-        take: 20,
       },
-    },
-  });
+    }),
+    prisma.product.findMany({
+      where: { tenantId, active: true },
+      select: {
+        id: true, name: true,
+        price: true, pricePacote: true, priceCaixa: true,
+        labelPacote: true, labelCaixa: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.clientProductPrice.findMany({
+      where: { clientId: id, tenantId },
+      select: { productId: true, price: true, pricePacote: true, priceCaixa: true },
+    }),
+  ]);
 
   if (!client) notFound();
 
@@ -210,8 +226,28 @@ export default async function ClienteDetailPage({
           )}
         </div>
 
-        {/* Coluna direita — pedidos */}
-        <div className="lg:col-span-2">
+        {/* Coluna direita — preços + pedidos */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Preços personalizados */}
+          <PrecosCard
+            clientId={id}
+            products={products.map((p) => ({
+              id:          p.id,
+              name:        p.name,
+              price:       Number(p.price),
+              pricePacote: p.pricePacote ? Number(p.pricePacote) : null,
+              labelPacote: p.labelPacote ?? null,
+              priceCaixa:  p.priceCaixa  ? Number(p.priceCaixa)  : null,
+              labelCaixa:  p.labelCaixa  ?? null,
+            }))}
+            initialPrices={customPrices.map((c) => ({
+              productId:   c.productId,
+              price:       c.price       ? Number(c.price)       : null,
+              pricePacote: c.pricePacote ? Number(c.pricePacote) : null,
+              priceCaixa:  c.priceCaixa  ? Number(c.priceCaixa)  : null,
+            }))}
+          />
+
           <h2 className="mb-3 text-lg font-semibold text-gray-900">Pedidos recentes</h2>
           <div className="space-y-3">
             {client.orders.length > 0 ? (

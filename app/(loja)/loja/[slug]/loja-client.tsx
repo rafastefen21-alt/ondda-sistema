@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ShoppingCart, Plus, Minus, Package, Search, Clock,
   X, Send, LogIn, UserPlus, CheckCircle2, ChevronRight,
+  Lock, Eye, EyeOff, LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,15 +55,27 @@ function cartKey(productId: string, tier: Tier) {
   return `${productId}-${tier}`;
 }
 
-function tiersOf(p: Product): { tier: Tier; price: number; label: string }[] {
+function tiersOf(
+  p: Product,
+  customPrices: CustomPrice[] = [],
+): { tier: Tier; price: number; label: string }[] {
+  const custom = customPrices.find((c) => c.productId === p.id);
   const tiers: { tier: Tier; price: number; label: string }[] = [
-    { tier: "unidade", price: p.price, label: `${p.unit}` },
+    { tier: "unidade", price: custom?.price ?? p.price, label: `${p.unit}` },
   ];
   if (p.pricePacote && p.labelPacote) {
-    tiers.push({ tier: "pacote", price: p.pricePacote, label: p.labelPacote });
+    tiers.push({
+      tier:  "pacote",
+      price: custom?.pricePacote ?? p.pricePacote,
+      label: p.labelPacote,
+    });
   }
   if (p.priceCaixa && p.labelCaixa) {
-    tiers.push({ tier: "caixa", price: p.priceCaixa, label: p.labelCaixa });
+    tiers.push({
+      tier:  "caixa",
+      price: custom?.priceCaixa ?? p.priceCaixa,
+      label: p.labelCaixa,
+    });
   }
   return tiers;
 }
@@ -79,6 +92,24 @@ interface TenantInfo {
   pedidoMinimo: number;
 }
 
+// ─── Loja session (localStorage) ─────────────────────────────────────────────
+interface CustomPrice {
+  productId:   string;
+  price:       number | null;
+  pricePacote: number | null;
+  priceCaixa:  number | null;
+}
+
+interface LojaSession {
+  id:           string;
+  name:         string | null;
+  email:        string;
+  active:       boolean;
+  customPrices: CustomPrice[];
+}
+
+const SESSION_KEY = (slug: string) => `loja_session_${slug}`;
+
 export function LojaClient({
   tenant,
   products,
@@ -90,6 +121,65 @@ export function LojaClient({
 }) {
   const [step, setStep] = useState<Step>("catalogo");
   const [cart, setCart] = useState<Record<string, CartItem>>({});
+
+  // ── Sessão do cliente na loja ──────────────────────────────────────────────
+  const [lojaSession,    setLojaSession]    = useState<LojaSession | null>(null);
+  const [showLoginPanel, setShowLoginPanel] = useState(false);
+  const [loginEmail,     setLoginEmail]     = useState("");
+  const [loginPassword,  setLoginPassword]  = useState("");
+  const [loginLoading,   setLoginLoading]   = useState(false);
+  const [loginError,     setLoginError]     = useState("");
+  const [showLoginPass,  setShowLoginPass]  = useState(false);
+
+  // Carrega sessão salva
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY(tenant.slug));
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<LojaSession>;
+        // Garante compatibilidade com sessões antigas sem customPrices
+        setLojaSession({ customPrices: [], ...parsed } as LojaSession);
+      }
+    } catch { /* ignora */ }
+  }, [tenant.slug]);
+
+  function saveSession(s: LojaSession) {
+    setLojaSession(s);
+    localStorage.setItem(SESSION_KEY(tenant.slug), JSON.stringify(s));
+    setShowLoginPanel(false);
+    setLoginEmail("");
+    setLoginPassword("");
+    setLoginError("");
+  }
+
+  function logout() {
+    setLojaSession(null);
+    localStorage.removeItem(SESSION_KEY(tenant.slug));
+    setCart({});
+  }
+
+  async function handleLojaLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginError("");
+    setLoginLoading(true);
+    try {
+      const res  = await fetch(`/api/loja/${tenant.slug}/login`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error ?? "Erro ao entrar."); return; }
+      saveSession(data as LojaSession);
+    } catch {
+      setLoginError("Erro de conexão. Tente novamente.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  // Preços visíveis apenas para clientes aprovados
+  const showPrices = lojaSession?.active === true;
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [tab, setTab] = useState<CheckoutTab>("novo");
@@ -681,16 +771,147 @@ export function LojaClient({
 
       {/* Products */}
       <main className="mx-auto max-w-6xl px-4 py-6">
+
+        {/* ── Painel de sessão / login ───────────────────────────────────────── */}
+        {lojaSession ? (
+          // Cliente logado
+          <div className={`mb-5 flex items-center justify-between rounded-xl border px-4 py-3 ${
+            lojaSession.active
+              ? "border-green-200 bg-green-50"
+              : "border-yellow-200 bg-yellow-50"
+          }`}>
+            <div>
+              {lojaSession.active ? (
+                <>
+                  <p className="text-sm font-semibold text-green-800">
+                    Olá, {lojaSession.name ?? lojaSession.email}! 👋
+                  </p>
+                  <p className="text-xs text-green-700">Você está logado e pode ver os preços.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-yellow-800">
+                    Cadastro em análise
+                  </p>
+                  <p className="text-xs text-yellow-700">
+                    Seu cadastro está sendo analisado. Os preços serão liberados após a aprovação.
+                  </p>
+                </>
+              )}
+            </div>
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sair
+            </button>
+          </div>
+        ) : showLoginPanel ? (
+          // Formulário de login inline
+          <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-blue-900">Entrar para ver os preços</p>
+              <button onClick={() => setShowLoginPanel(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleLojaLogin} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <label className="mb-1 block text-xs font-medium text-blue-800">Email</label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value.toLowerCase())}
+                  placeholder="seu@email.com"
+                  required
+                  autoFocus
+                  className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-xs font-medium text-blue-800">Senha</label>
+                <div className="relative">
+                  <input
+                    type={showLoginPass ? "text" : "password"}
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 pr-9 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPass((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showLoginPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="flex items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                style={{ backgroundColor: tenant.corPrimaria }}
+              >
+                {loginLoading
+                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  : <LogIn className="h-4 w-4" />}
+                {loginLoading ? "Entrando..." : "Entrar"}
+              </button>
+            </form>
+            {loginError && (
+              <p className="mt-2 text-xs text-red-600">{loginError}</p>
+            )}
+            <p className="mt-2 text-xs text-blue-700">
+              Ainda não tem cadastro?{" "}
+              <button
+                onClick={() => { setShowLoginPanel(false); setStep("checkout"); }}
+                className="font-semibold underline"
+              >
+                Faça seu pedido
+              </button>{" "}
+              e aguarde a aprovação.
+            </p>
+          </div>
+        ) : (
+          // Não logado — banner de convite
+          <div
+            className="mb-5 flex items-center justify-between rounded-xl border border-dashed px-4 py-3"
+            style={{ borderColor: tenant.corPrimaria + "60", backgroundColor: tenant.corPrimaria + "10" }}
+          >
+            <div className="flex items-center gap-3">
+              <Lock className="h-5 w-5 shrink-0" style={{ color: tenant.corPrimaria }} />
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Preços disponíveis para clientes aprovados</p>
+                <p className="text-xs text-gray-500">Faça login para ver os preços e adicionar ao carrinho.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowLoginPanel(true)}
+              className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+              style={{ backgroundColor: tenant.corPrimaria }}
+            >
+              Entrar
+            </button>
+          </div>
+        )}
+
         <p className="mb-4 text-sm text-gray-500">
           {filtered.length} produto(s) disponível(is)
         </p>
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((product) => {
-            const allTiers = tiersOf(product);
-            // Mostra só pacote e caixa; fallback para unidade se nenhum existe
-            const tiers = allTiers.filter((t) => t.tier !== "unidade").length > 0
-              ? allTiers.filter((t) => t.tier !== "unidade")
+            const allTiers = tiersOf(product, lojaSession?.customPrices ?? []);
+            // Mostra só caixa; fallback para pacote se não houver caixa; fallback para unidade se não houver nenhum
+            const caixaTiers  = allTiers.filter((t) => t.tier === "caixa");
+            const pacoteTiers = allTiers.filter((t) => t.tier === "pacote");
+            const tiers = caixaTiers.length > 0
+              ? caixaTiers
+              : pacoteTiers.length > 0
+              ? pacoteTiers
               : allTiers;
             return (
               <div
@@ -739,56 +960,67 @@ export function LojaClient({
 
                   {/* Tiers */}
                   <div className="mt-3 space-y-2">
-                    {tiers.map(({ tier, price, label }) => {
-                      const key = cartKey(product.id, tier);
-                      const cartItem = cart[key];
-                      const step = product.minQuantity ?? 1;
+                    {showPrices ? (
+                      tiers.map(({ tier, price, label }) => {
+                        const key = cartKey(product.id, tier);
+                        const cartItem = cart[key];
+                        const step = product.minQuantity ?? 1;
 
-                      return (
-                        <div key={tier} className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs text-gray-500">{label}</p>
-                            <p className="text-sm font-bold text-gray-900">{fmtPrice(price)}</p>
-                          </div>
+                        return (
+                          <div key={tier} className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs text-gray-500">{label}</p>
+                              <p className="text-sm font-bold text-gray-900">{fmtPrice(price)}</p>
+                            </div>
 
-                          {!cartItem ? (
-                            <button
-                              onClick={() => addToCart(product, tier, price, label)}
-                              className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90 active:scale-95"
-                              style={{ backgroundColor: tenant.corPrimaria }}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                              Adicionar
-                            </button>
-                          ) : (
-                            <div
-                              className="flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1"
-                              style={{ backgroundColor: `${tenant.corPrimaria}20` }}
-                            >
+                            {!cartItem ? (
                               <button
-                                onClick={() => updateQty(key, cartItem.quantity - step)}
-                                className="flex h-6 w-6 items-center justify-center rounded-md bg-white shadow-sm hover:bg-gray-50"
-                              >
-                                <Minus className="h-3 w-3 text-gray-700" />
-                              </button>
-                              <span
-                                className="min-w-[3rem] text-center text-xs font-bold"
-                                style={{ color: tenant.corPrimaria }}
-                              >
-                                {cartItem.quantity} {product.unit}
-                              </span>
-                              <button
-                                onClick={() => updateQty(key, cartItem.quantity + step)}
-                                className="flex h-6 w-6 items-center justify-center rounded-md text-white shadow-sm"
+                                onClick={() => addToCart(product, tier, price, label)}
+                                className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90 active:scale-95"
                                 style={{ backgroundColor: tenant.corPrimaria }}
                               >
-                                <Plus className="h-3 w-3" />
+                                <Plus className="h-3.5 w-3.5" />
+                                Adicionar
                               </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            ) : (
+                              <div
+                                className="flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1"
+                                style={{ backgroundColor: `${tenant.corPrimaria}20` }}
+                              >
+                                <button
+                                  onClick={() => updateQty(key, cartItem.quantity - step)}
+                                  className="flex h-6 w-6 items-center justify-center rounded-md bg-white shadow-sm hover:bg-gray-50"
+                                >
+                                  <Minus className="h-3 w-3 text-gray-700" />
+                                </button>
+                                <span
+                                  className="min-w-[2.5rem] text-center text-sm font-bold tabular-nums"
+                                  style={{ color: tenant.corPrimaria }}
+                                >
+                                  {cartItem.quantity}
+                                </span>
+                                <button
+                                  onClick={() => updateQty(key, cartItem.quantity + step)}
+                                  className="flex h-6 w-6 items-center justify-center rounded-md text-white shadow-sm"
+                                  style={{ backgroundColor: tenant.corPrimaria }}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      // Preços bloqueados
+                      <button
+                        onClick={() => setShowLoginPanel(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-xs font-medium text-gray-400 transition hover:border-gray-400 hover:text-gray-600"
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        Ver preço
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -22,6 +22,7 @@ import {
   Download,
   Ban,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -146,6 +147,16 @@ export function OrderDetailClient({
 }: OrderDetailClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  // ── Alerta de estoque na aprovação ──────────────────────────────────────────
+  type StockAlert = {
+    productId: string; productName: string; unit: string;
+    orderQty: number; stockQty: number;
+    severity: "FALTA" | "INSUFICIENTE" | "BAIXO";
+  };
+  const [stockAlerts,     setStockAlerts]     = useState<StockAlert[]>([]);
+  const [showStockModal,  setShowStockModal]  = useState(false);
+  const [checkingStock,   setCheckingStock]   = useState(false);
   const [mpLoading, setMpLoading] = useState<Record<string, boolean>>({});
   const [mpLinks,   setMpLinks]   = useState<Record<string, string>>({});
   const [copied,    setCopied]    = useState<Record<string, boolean>>({});
@@ -505,6 +516,26 @@ export function OrderDetailClient({
     }
   }
 
+  async function handleApprove() {
+    setCheckingStock(true);
+    try {
+      const res = await fetch(`/api/pedidos/${order.id}/stock-check`);
+      const data = await res.json();
+      const alerts: StockAlert[] = data.alerts ?? [];
+      if (alerts.length > 0) {
+        setStockAlerts(alerts);
+        setShowStockModal(true);
+      } else {
+        updateStatus("APROVADO");
+      }
+    } catch {
+      // Em caso de erro na checagem, aprova mesmo assim
+      updateStatus("APROVADO");
+    } finally {
+      setCheckingStock(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -536,10 +567,18 @@ export function OrderDetailClient({
           {canAdvance && nextAction && (
             <Button
               variant={nextAction.variant}
-              onClick={() => updateStatus(nextAction.nextStatus)}
-              disabled={loading}
+              onClick={() =>
+                nextAction.nextStatus === "APROVADO"
+                  ? handleApprove()
+                  : updateStatus(nextAction.nextStatus)
+              }
+              disabled={loading || checkingStock}
             >
-              {loading ? "..." : nextAction.label}
+              {checkingStock && nextAction.nextStatus === "APROVADO"
+                ? "Verificando estoque..."
+                : loading
+                ? "..."
+                : nextAction.label}
             </Button>
           )}
           {canCancel && (
@@ -1336,6 +1375,107 @@ export function OrderDetailClient({
           )}
         </div>
       </div>
+
+      {/* ── Modal de alerta de estoque ────────────────────────────────────────── */}
+      {showStockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            {/* Cabeçalho */}
+            <div className="flex items-center gap-3 border-b border-gray-100 px-6 py-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Alerta de Estoque</h3>
+                <p className="text-xs text-gray-500">
+                  {stockAlerts.length === 1
+                    ? "1 produto com atenção antes de aprovar"
+                    : `${stockAlerts.length} produtos com atenção antes de aprovar`}
+                </p>
+              </div>
+            </div>
+
+            {/* Lista de alertas */}
+            <div className="max-h-72 overflow-y-auto px-6 py-4 space-y-2">
+              {stockAlerts.map((a) => (
+                <div
+                  key={a.productId}
+                  className={`rounded-xl border px-4 py-3 ${
+                    a.severity === "FALTA"
+                      ? "border-red-200 bg-red-50"
+                      : a.severity === "INSUFICIENTE"
+                      ? "border-orange-200 bg-orange-50"
+                      : "border-yellow-200 bg-yellow-50"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {a.productName}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Pedido: <strong>{a.orderQty} {a.unit}</strong>
+                        {" · "}
+                        Estoque: <strong>{a.stockQty} {a.unit}</strong>
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        a.severity === "FALTA"
+                          ? "bg-red-100 text-red-700"
+                          : a.severity === "INSUFICIENTE"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {a.severity === "FALTA"
+                        ? "Em falta"
+                        : a.severity === "INSUFICIENTE"
+                        ? "Insuficiente"
+                        : "Baixo"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Legenda */}
+            <div className="mx-6 mb-4 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              <span className="font-semibold text-red-600">Em falta</span> = sem estoque ·{" "}
+              <span className="font-semibold text-orange-600">Insuficiente</span> = estoque menor que o pedido ·{" "}
+              <span className="font-semibold text-yellow-600">Baixo</span> = abaixo de 50 unidades
+            </div>
+
+            {/* Botões */}
+            <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
+              <button
+                onClick={() => {
+                  setShowStockModal(false);
+                  setStockAlerts([]);
+                  updateStatus("APROVADO");
+                }}
+                disabled={loading}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+              >
+                {loading
+                  ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  : <CheckCircle className="h-4 w-4" />}
+                {loading ? "Aprovando..." : "Aprovar mesmo assim"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowStockModal(false);
+                  setStockAlerts([]);
+                }}
+                disabled={loading}
+                className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

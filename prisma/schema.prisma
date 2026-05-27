@@ -126,6 +126,7 @@ model Tenant {
   costs          OperationalCost[]
   stockItems     StockItem[]
   factoryOrders  FactoryOrder[]
+  clientPrices   ClientProductPrice[]
 
   @@index([slug])
 }
@@ -175,6 +176,7 @@ model User {
   sessions       Session[]
   orders         Order[]  @relation("OrderClient")
   approvedOrders Order[]  @relation("OrderApprover")
+  clientPrices   ClientProductPrice[]
 
   @@index([tenantId])
 }
@@ -256,8 +258,9 @@ model Product {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  orderItems OrderItem[]
-  stockItem  StockItem?
+  orderItems    OrderItem[]
+  stockItem     StockItem?
+  clientPrices  ClientProductPrice[]
 
   @@index([tenantId])
 }
@@ -419,6 +422,32 @@ model StockMovement {
 
   @@index([tenantId])
   @@index([stockItemId])
+}
+
+// ============================================================
+// PREÇOS PERSONALIZADOS POR CLIENTE
+// ============================================================
+
+model ClientProductPrice {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Preços customizados (null = usa o padrão do produto)
+  price        Decimal? @db.Decimal(10, 2)
+  pricePacote  Decimal? @db.Decimal(10, 2)
+  priceCaixa   Decimal? @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, productId])
+  @@index([tenantId])
+  @@index([clientId])
 }
 
 // ============================================================
