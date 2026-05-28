@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Plus, Shield, Wrench, UserCog, X, Check, ToggleLeft, ToggleRight, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Users, Plus, Shield, Wrench, UserCog, X, Check, ToggleLeft, ToggleRight, KeyRound, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -165,6 +165,8 @@ export function UsuariosManager({ initial, currentUserId }: { initial: User[]; c
   const [error, setError]       = useState("");
   const [form, setForm]         = useState({ name: "", email: "", password: "", role: "GERENTE" as Role });
   const [changingPasswordFor, setChangingPasswordFor] = useState<User | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId]         = useState<string | null>(null);
+  const [deleting, setDeleting]                       = useState(false);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -204,6 +206,19 @@ export function UsuariosManager({ initial, currentUserId }: { initial: User[]; c
     if (!res.ok) {
       setUsers((all) => all.map((u) => (u.id === userId ? { ...u, role: prev!.role } : u)));
     }
+  }
+
+  async function handleDelete(userId: string) {
+    setDeleting(true);
+    const res = await fetch(`/api/usuarios/${userId}`, { method: "DELETE" });
+    setDeleting(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error ?? "Erro ao excluir usuário.");
+      return;
+    }
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    setConfirmDeleteId(null);
   }
 
   async function handleToggleActive(userId: string, active: boolean) {
@@ -315,61 +330,104 @@ export function UsuariosManager({ initial, currentUserId }: { initial: User[]; c
           {/* User list */}
           <div className="divide-y divide-gray-100">
             {users.map((user) => {
-              const isSelf = user.id === currentUserId;
+              const isSelf       = user.id === currentUserId;
+              const isConfirming = confirmDeleteId === user.id;
               return (
-                <div key={user.id} className={`flex items-center gap-3 py-3 ${!user.active ? "opacity-50" : ""}`}>
-                  {/* Avatar */}
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900">
-                    {user.name?.charAt(0).toUpperCase() ?? "U"}
-                  </div>
-
-                  {/* Info */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium text-gray-900">{user.name}</p>
-                      {isSelf && (
-                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">você</span>
-                      )}
-                      {!user.active && (
-                        <Badge variant="secondary" className="text-xs">Inativo</Badge>
-                      )}
+                <div key={user.id} className={`py-3 ${!user.active ? "opacity-50" : ""}`}>
+                  <div className="flex items-center gap-3">
+                    {/* Avatar */}
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900">
+                      {user.name?.charAt(0).toUpperCase() ?? "U"}
                     </div>
-                    <p className="truncate text-xs text-gray-400">{user.email}</p>
+
+                    {/* Info */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-medium text-gray-900">{user.name}</p>
+                        {isSelf && (
+                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">você</span>
+                        )}
+                        {!user.active && (
+                          <Badge variant="secondary" className="text-xs">Inativo</Badge>
+                        )}
+                      </div>
+                      <p className="truncate text-xs text-gray-400">{user.email}</p>
+                    </div>
+
+                    {/* Role selector */}
+                    <select
+                      value={user.role}
+                      disabled={isSelf}
+                      onChange={(e) => handleRoleChange(user.id, e.target.value as Role)}
+                      className={`rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60 ${ROLE_COLORS[user.role]}`}
+                    >
+                      <option value="TENANT_ADMIN">Administrador</option>
+                      <option value="GERENTE">Gerente</option>
+                      <option value="OPERADOR">Operador</option>
+                    </select>
+
+                    {/* Change password */}
+                    <button
+                      onClick={() => setChangingPasswordFor(user)}
+                      title="Alterar senha"
+                      className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-yellow-50 hover:text-yellow-600"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </button>
+
+                    {/* Active toggle */}
+                    <button
+                      disabled={isSelf}
+                      onClick={() => handleToggleActive(user.id, !user.active)}
+                      title={user.active ? "Desativar acesso" : "Ativar acesso"}
+                      className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {user.active
+                        ? <ToggleRight className="h-5 w-5 text-green-500" />
+                        : <ToggleLeft className="h-5 w-5" />
+                      }
+                    </button>
+
+                    {/* Delete */}
+                    {!isSelf && (
+                      <button
+                        onClick={() => setConfirmDeleteId(isConfirming ? null : user.id)}
+                        title="Excluir usuário"
+                        className={`flex-shrink-0 rounded-md p-1 transition-colors ${
+                          isConfirming
+                            ? "bg-red-100 text-red-600"
+                            : "text-gray-300 hover:bg-red-50 hover:text-red-500"
+                        }`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Role selector */}
-                  <select
-                    value={user.role}
-                    disabled={isSelf}
-                    onChange={(e) => handleRoleChange(user.id, e.target.value as Role)}
-                    className={`rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60 ${ROLE_COLORS[user.role]}`}
-                  >
-                    <option value="TENANT_ADMIN">Administrador</option>
-                    <option value="GERENTE">Gerente</option>
-                    <option value="OPERADOR">Operador</option>
-                  </select>
-
-                  {/* Change password */}
-                  <button
-                    onClick={() => setChangingPasswordFor(user)}
-                    title="Alterar senha"
-                    className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-yellow-50 hover:text-yellow-600"
-                  >
-                    <KeyRound className="h-4 w-4" />
-                  </button>
-
-                  {/* Active toggle */}
-                  <button
-                    disabled={isSelf}
-                    onClick={() => handleToggleActive(user.id, !user.active)}
-                    title={user.active ? "Desativar acesso" : "Ativar acesso"}
-                    className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {user.active
-                      ? <ToggleRight className="h-5 w-5 text-green-500" />
-                      : <ToggleLeft className="h-5 w-5" />
-                    }
-                  </button>
+                  {/* Confirmação inline de exclusão */}
+                  {isConfirming && (
+                    <div className="mt-2 ml-12 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                      <p className="flex-1 text-xs text-red-700">
+                        Excluir <strong>{user.name ?? user.email}</strong>? Esta ação não pode ser desfeita.
+                      </p>
+                      <button
+                        onClick={() => handleDelete(user.id)}
+                        disabled={deleting}
+                        className="flex items-center gap-1 rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deleting
+                          ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          : <Trash2 className="h-3 w-3" />}
+                        {deleting ? "Excluindo..." : "Confirmar"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

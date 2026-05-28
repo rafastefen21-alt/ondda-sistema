@@ -49,3 +49,29 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const session = await auth();
+  if (!session?.user?.tenantId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!["TENANT_ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  }
+
+  // Não pode excluir a si mesmo
+  if (id === session.user.id) {
+    return NextResponse.json({ error: "Você não pode excluir seu próprio usuário." }, { status: 400 });
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { id, tenantId: session.user.tenantId },
+  });
+  if (!user) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
+
+  await prisma.user.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true });
+}

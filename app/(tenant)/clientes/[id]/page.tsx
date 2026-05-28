@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Mail, Phone, ShoppingBag, Calendar,
-  Pencil, User, DollarSign, Building2, FileText,
+  Pencil, User, DollarSign, Building2, FileText, MapPin,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -142,11 +142,22 @@ export default async function ClienteDetailPage({
                   <span className="text-gray-700">{client.cnpj ?? client.cpf}</span>
                 </div>
               )}
-              {client.city && (
-                <p className="text-xs text-gray-400 pt-1">
-                  {[client.logradouro, client.numero, client.bairro, client.city, client.state]
-                    .filter(Boolean).join(", ")}
-                </p>
+              {(client.logradouro || client.city) && (
+                <div className="pt-1 border-t border-gray-100 mt-1">
+                  <div className="flex items-start gap-2 text-sm">
+                    <MapPin className="h-4 w-4 shrink-0 text-gray-400 mt-0.5" />
+                    <div className="text-gray-700 text-xs leading-relaxed">
+                      <p className="font-medium text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">Endereço de entrega</p>
+                      {client.logradouro && (
+                        <p>{client.logradouro}{client.numero ? `, ${client.numero}` : ""}{client.complemento ? ` — ${client.complemento}` : ""}</p>
+                      )}
+                      {client.bairro && <p>{client.bairro}</p>}
+                      {client.city && (
+                        <p>{client.city}{client.state ? `/${client.state}` : ""}{client.cep ? ` — CEP ${client.cep}` : ""}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
               <div className="flex items-center gap-2 text-sm pt-1">
                 <Calendar className="h-4 w-4 shrink-0 text-gray-400" />

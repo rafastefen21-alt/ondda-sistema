@@ -518,90 +518,113 @@ export function LojaClient({
                       </div>
                     </div>
 
-                    {/* Endereço: resultado do CNPJ */}
-                    {cnpjAddress && (
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
-                        <p className="text-xs font-semibold text-blue-800">Endereço encontrado no cartão CNPJ:</p>
-                        <p className="text-xs text-blue-700">
-                          {cnpjAddress.logradouro}{cnpjAddress.numero ? `, ${cnpjAddress.numero}` : ""}
-                          {cnpjAddress.complemento ? ` — ${cnpjAddress.complemento}` : ""}<br />
-                          {cnpjAddress.bairro} · {cnpjAddress.city}/{cnpjAddress.state}
-                          {cnpjAddress.cep ? ` · CEP ${cnpjAddress.cep}` : ""}
-                        </p>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={sameAddress}
-                            onChange={(e) => {
-                              setSameAddress(e.target.checked);
-                              setShowManual(!e.target.checked);
-                              if (e.target.checked) applyAddress(cnpjAddress);
-                            }}
-                            className="h-4 w-4 rounded border-gray-300 accent-blue-700"
-                          />
-                          <span className="text-xs font-medium text-blue-900">
-                            O endereço de entrega é o mesmo do cartão CNPJ
-                          </span>
-                        </label>
-                        {!sameAddress && (
-                          <button
-                            type="button"
-                            onClick={() => setShowManual((v) => !v)}
-                            className="text-xs text-blue-600 underline"
-                          >
-                            {showManual ? "Ocultar campos" : "Informar outro endereço"}
-                          </button>
+                    {/* ── Endereço de entrega ─────────────────────────────── */}
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-700">Endereço de entrega</p>
+
+                        {/* Checkbox "mesmo do CNPJ" — só aparece quando CNPJ encontrado */}
+                        {cnpjAddress && (
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={sameAddress}
+                              onChange={(e) => {
+                                setSameAddress(e.target.checked);
+                                if (e.target.checked) applyAddress(cnpjAddress);
+                              }}
+                              className="h-4 w-4 rounded border-gray-300 accent-blue-700"
+                            />
+                            <span className="text-xs font-medium text-blue-900">
+                              Mesmo endereço do CNPJ
+                            </span>
+                          </label>
                         )}
                       </div>
-                    )}
 
-                    {/* Endereço manual (sem CNPJ ou endereço diferente) */}
-                    {(showManual || (!cnpjAddress && form.cnpj.replace(/\D/g,"").length === 14)) && (
-                      <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                        <p className="text-xs font-semibold text-gray-700">Endereço de entrega</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs">CEP</Label>
-                            <Input placeholder="00000-000" value={form.cep}
-                              onChange={(e) => setForm((f) => ({ ...f, cep: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Número</Label>
-                            <Input placeholder="123" value={form.numero}
-                              onChange={(e) => setForm((f) => ({ ...f, numero: e.target.value }))} />
-                          </div>
+                      {/* Campos sempre visíveis; auto-preenchidos quando sameAddress */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">CEP</Label>
+                          <Input
+                            placeholder="00000-000"
+                            value={form.cep}
+                            readOnly={sameAddress}
+                            onChange={(e) => setForm((f) => ({ ...f, cep: e.target.value }))}
+                            className={sameAddress ? "bg-blue-50 text-gray-600" : ""}
+                          />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs">Logradouro</Label>
-                          <Input placeholder="Rua, Av..." value={form.logradouro}
-                            onChange={(e) => setForm((f) => ({ ...f, logradouro: e.target.value }))} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Bairro</Label>
-                            <Input placeholder="Bairro" value={form.bairro}
-                              onChange={(e) => setForm((f) => ({ ...f, bairro: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Complemento</Label>
-                            <Input placeholder="Sala, Apto..." value={form.complemento}
-                              onChange={(e) => setForm((f) => ({ ...f, complemento: e.target.value }))} />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Cidade</Label>
-                            <Input placeholder="São Paulo" value={form.city}
-                              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Estado</Label>
-                            <Input placeholder="SP" maxLength={2} value={form.state}
-                              onChange={(e) => setForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))} />
-                          </div>
+                          <Label className="text-xs">Número</Label>
+                          <Input
+                            placeholder="123"
+                            value={form.numero}
+                            readOnly={sameAddress}
+                            onChange={(e) => setForm((f) => ({ ...f, numero: e.target.value }))}
+                            className={sameAddress ? "bg-blue-50 text-gray-600" : ""}
+                          />
                         </div>
                       </div>
-                    )}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Logradouro</Label>
+                        <Input
+                          placeholder="Rua, Avenida..."
+                          value={form.logradouro}
+                          readOnly={sameAddress}
+                          onChange={(e) => setForm((f) => ({ ...f, logradouro: e.target.value }))}
+                          className={sameAddress ? "bg-blue-50 text-gray-600" : ""}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Bairro</Label>
+                          <Input
+                            placeholder="Bairro"
+                            value={form.bairro}
+                            readOnly={sameAddress}
+                            onChange={(e) => setForm((f) => ({ ...f, bairro: e.target.value }))}
+                            className={sameAddress ? "bg-blue-50 text-gray-600" : ""}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Complemento</Label>
+                          <Input
+                            placeholder="Sala, Apto..."
+                            value={form.complemento}
+                            onChange={(e) => setForm((f) => ({ ...f, complemento: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Cidade</Label>
+                          <Input
+                            placeholder="São Paulo"
+                            value={form.city}
+                            readOnly={sameAddress}
+                            onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                            className={sameAddress ? "bg-blue-50 text-gray-600" : ""}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Estado</Label>
+                          <Input
+                            placeholder="SP"
+                            maxLength={2}
+                            value={form.state}
+                            readOnly={sameAddress}
+                            onChange={(e) => setForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))}
+                            className={sameAddress ? "bg-blue-50 text-gray-600" : ""}
+                          />
+                        </div>
+                      </div>
+
+                      {sameAddress && (
+                        <p className="text-[11px] text-blue-600">
+                          Preenchido automaticamente pelo CNPJ. Desmarque para editar.
+                        </p>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <>
