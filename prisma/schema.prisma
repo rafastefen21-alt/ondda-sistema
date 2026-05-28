@@ -140,6 +140,7 @@ model User {
   tenantId      String?
   tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name          String?
+  nomeFantasia  String?   // Nome fantasia / nome comercial (ex: "Hamburgueria do João")
   email         String    @unique
   emailVerified DateTime?
   password      String?

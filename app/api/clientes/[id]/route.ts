@@ -20,7 +20,7 @@ export async function PATCH(
 
   const body = await req.json();
   const {
-    name, email, password,
+    name, nomeFantasia, email, password,
     cnpj, cpf, ie, phone,
     cep, logradouro, numero, complemento, bairro, city, state, codigoCidade,
     financeiroNome, financeiroEmail, financeiroPhone,
@@ -44,6 +44,7 @@ export async function PATCH(
 
   const data: Record<string, unknown> = {
     name:            name           ?? existing.name,
+    nomeFantasia:    nomeFantasia   !== undefined ? nomeFantasia   || null : existing.nomeFantasia,
     email:           email          ?? existing.email,
     phone:           phone          !== undefined ? phone   || null : existing.phone,
     cnpj:            cnpj           !== undefined ? cnpj    || null : existing.cnpj,

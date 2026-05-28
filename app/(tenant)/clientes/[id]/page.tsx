@@ -75,7 +75,12 @@ export default async function ClienteDetailPage({
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {client.nomeFantasia ?? client.name}
+          </h1>
+          {client.nomeFantasia && (
+            <p className="text-sm text-gray-400">Razão Social: {client.name}</p>
+          )}
           <p className="text-sm text-gray-500">Cliente desde {formatDate(client.createdAt)}</p>
         </div>
         <Badge variant={client.active ? "success" : "secondary"}>
@@ -126,6 +131,13 @@ export default async function ClienteDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              {client.nomeFantasia && (
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Nome Fantasia</p>
+                  <p className="text-sm font-semibold text-gray-900">{client.nomeFantasia}</p>
+                  <p className="text-xs text-gray-400">{client.name}</p>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-sm">
                 <Mail className="h-4 w-4 shrink-0 text-gray-400" />
                 <span className="text-gray-700 break-all">{client.email}</span>

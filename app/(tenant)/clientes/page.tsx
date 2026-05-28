@@ -52,8 +52,11 @@ export default async function ClientesPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-gray-900">
-                        {client.name ?? "Sem nome"}
+                        {client.nomeFantasia ?? client.name ?? "Sem nome"}
                       </p>
+                      {client.nomeFantasia && (
+                        <p className="truncate text-xs text-gray-400">{client.name}</p>
+                      )}
                       <p className="truncate text-sm text-gray-400">{client.email}</p>
                     </div>
                     <Badge variant={client.active ? "success" : "secondary"}>

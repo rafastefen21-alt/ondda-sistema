@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const {
-    name, email, password,
+    name, nomeFantasia, email, password,
     cnpj, cpf, ie, phone,
     cep, logradouro, numero, complemento, bairro, city, state, codigoCidade,
     financeiroNome, financeiroEmail, financeiroPhone,
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     data: {
       tenantId,
       name,
+      nomeFantasia: nomeFantasia   || null,
       email,
       password:     passwordHash,
       role:         "CLIENTE",

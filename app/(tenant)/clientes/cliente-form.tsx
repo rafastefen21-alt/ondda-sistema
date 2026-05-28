@@ -20,6 +20,7 @@ const selectClass =
 type ClienteData = {
   id?: string;
   name?: string;
+  nomeFantasia?: string | null;
   email?: string;
   phone?: string;
   cnpj?: string | null;
@@ -132,6 +133,7 @@ export function ClienteForm({
     const fd = new FormData(e.currentTarget);
     const body: Record<string, unknown> = {
       name:         fd.get("name"),
+      nomeFantasia: fd.get("nomeFantasia") || null,
       email:        fd.get("email"),
       phone:        fd.get("phone")   || null,
       cnpj:         cnpj || null,
@@ -207,13 +209,23 @@ export function ClienteForm({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5 col-span-2">
-                <Label htmlFor="name">Nome / Razão Social *</Label>
+                <Label htmlFor="name">Razão Social *</Label>
                 <Input
                   id="name" name="name"
                   defaultValue={client?.name}
-                  placeholder="Ex: Padaria Boa Sorte"
+                  placeholder="Ex: João Silva ME"
                   required
                 />
+                <p className="text-xs text-gray-400">Usado para NF-e e boleto.</p>
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="nomeFantasia">Nome Fantasia</Label>
+                <Input
+                  id="nomeFantasia" name="nomeFantasia"
+                  defaultValue={client?.nomeFantasia ?? ""}
+                  placeholder="Ex: Hamburgueria do João"
+                />
+                <p className="text-xs text-gray-400">Nome comercial exibido internamente e nos pedidos.</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email *</Label>
