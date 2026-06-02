@@ -300,9 +300,13 @@ export async function GET(_req: NextRequest) {
     categoryName: p.category?.name ?? null,
   }));
 
-  const buffer = await renderToBuffer(
-    React.createElement(CatalogoPDF, { tenant: { name: tenant.name, logoUrl: tenant.lojaLogoUrl ?? null }, products: productRows }),
-  );
+  const element = React.createElement(CatalogoPDF, {
+    tenant: { name: tenant.name, logoUrl: tenant.lojaLogoUrl ?? null },
+    products: productRows,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }) as any;
+
+  const buffer = await renderToBuffer(element);
 
   const filename = `catalogo-${tenant.name.toLowerCase().replace(/\s+/g, "-")}.pdf`;
 
