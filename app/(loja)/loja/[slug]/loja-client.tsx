@@ -885,7 +885,29 @@ export function LojaClient({
               </button>
             </form>
             {loginError && (
-              <p className="mt-2 text-xs text-red-600">{loginError}</p>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-xs text-red-600">{loginError}</p>
+                <a
+                  href="/esqueci-senha"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-xs font-medium text-blue-700 hover:underline"
+                >
+                  Esqueci minha senha
+                </a>
+              </div>
+            )}
+            {!loginError && (
+              <div className="mt-2 flex justify-end">
+                <a
+                  href="/esqueci-senha"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-gray-400 hover:text-blue-700 hover:underline"
+                >
+                  Esqueci minha senha
+                </a>
+              </div>
             )}
             <p className="mt-2 text-xs text-blue-700">
               Ainda não tem cadastro?{" "}
