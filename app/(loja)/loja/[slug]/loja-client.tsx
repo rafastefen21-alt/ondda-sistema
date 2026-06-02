@@ -1004,13 +1004,16 @@ export function LojaClient({
                       {product.description}
                     </p>
                   )}
-                  {(product.weightGrams || product.diameterCm) && (
+                  {(product.weightGrams || product.diameterCm || product.shelfLifeDays) && (
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                       {product.weightGrams && (
                         <span className="text-xs text-gray-400">Peso - {product.weightGrams} gr</span>
                       )}
                       {product.diameterCm && (
                         <span className="text-xs text-gray-400">Diâmetro - {product.diameterCm} cm</span>
+                      )}
+                      {product.shelfLifeDays && (
+                        <span className="text-xs text-gray-400">Validade - {product.shelfLifeDays} dias</span>
                       )}
                     </div>
                   )}
