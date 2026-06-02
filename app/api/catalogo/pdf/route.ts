@@ -310,7 +310,7 @@ export async function GET(_req: NextRequest) {
 
   const filename = `catalogo-${tenant.name.toLowerCase().replace(/\s+/g, "-")}.pdf`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
