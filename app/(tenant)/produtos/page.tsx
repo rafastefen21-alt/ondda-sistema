@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CategoriasManager } from "./categorias-manager";
 import { ProdutosBulkClient } from "./produtos-bulk-client";
@@ -55,6 +55,14 @@ export default async function ProdutosPage() {
         </div>
         {canManage && (
           <div className="flex items-center gap-2">
+            <a
+              href="/api/catalogo/pdf"
+              download
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              <FileDown className="h-4 w-4 text-blue-700" />
+              Baixar Catálogo PDF
+            </a>
             <ProdutosBulkClient />
             <Link href="/produtos/novo">
               <Button>
