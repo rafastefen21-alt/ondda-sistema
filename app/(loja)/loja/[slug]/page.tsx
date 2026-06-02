@@ -93,6 +93,8 @@ export default async function LojaPage({
         unit: p.unit,
         minQuantity: p.minQuantity ? Number(p.minQuantity) : undefined,
         shelfLifeDays: p.shelfLifeDays ?? null,
+        weightGrams: p.weightGrams ?? null,
+        diameterCm: p.diameterCm ? Number(p.diameterCm) : null,
         pricePacote: p.pricePacote ? Number(p.pricePacote) : null,
         priceCaixa: p.priceCaixa ? Number(p.priceCaixa) : null,
         labelPacote: p.labelPacote ?? null,

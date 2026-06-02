@@ -23,6 +23,8 @@ interface Product {
   unit: string;
   minQuantity?: number;
   shelfLifeDays?: number | null;
+  weightGrams?: number | null;
+  diameterCm?: number | null;
   pricePacote: number | null;
   priceCaixa: number | null;
   labelPacote: string | null;
@@ -1001,6 +1003,16 @@ export function LojaClient({
                     <p className="mt-1 text-sm text-gray-500 line-clamp-2">
                       {product.description}
                     </p>
+                  )}
+                  {(product.weightGrams || product.diameterCm) && (
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                      {product.weightGrams && (
+                        <span className="text-xs text-gray-400">Peso - {product.weightGrams} gr</span>
+                      )}
+                      {product.diameterCm && (
+                        <span className="text-xs text-gray-400">Diâmetro - {product.diameterCm} cm</span>
+                      )}
+                    </div>
                   )}
 
                   {/* Tiers */}

@@ -264,8 +264,8 @@ export function ProdutosListClient({
                         const hasUnitPrice = !isNaN(unitQty) && unitQty > 1;
                         const extras = [
                           hasUnitPrice && `R$ ${(product.price / unitQty).toFixed(2)}/un`,
-                          product.weightGrams && `${product.weightGrams} g`,
-                          product.diameterCm  && `⌀ ${product.diameterCm.toFixed(1)} cm`,
+                          product.weightGrams && `Peso - ${product.weightGrams} gr`,
+                          product.diameterCm  && `Diâmetro - ${product.diameterCm.toFixed(0)} cm`,
                           product.pricePacote && `Pacote: ${formatCurrency(product.pricePacote)}${product.labelPacote ? ` (${product.labelPacote})` : ""}`,
                         ].filter(Boolean);
                         if (!extras.length) return null;
