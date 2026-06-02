@@ -28,6 +28,7 @@ interface Order {
   scheduledDeliveryDate?: string | Date | null;
   client?: { name: string | null } | null;
   items: OrderItem[];
+  payments: { status: string }[];
 }
 
 interface Props {
@@ -68,6 +69,7 @@ const STATUS_TABS = [
   { label: "Aguardando",  value: "PENDENTE_APROVACAO" },
   { label: "Aprovados",   value: "APROVADO" },
   { label: "Em Produção", value: "EM_PRODUCAO" },
+  { label: "Pronto",      value: "PRONTO" },
   { label: "Em Entrega",  value: "EM_ENTREGA" },
   { label: "Entregues",   value: "ENTREGUE" },
 ];
@@ -158,6 +160,15 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
       (s, i) => s + Number(i.unitPrice) * Number(i.quantity),
       0
     );
+  }
+
+  function paymentTag(order: Order): { label: string; className: string } | null {
+    if (order.payments.length === 0) return null;
+    const allPaid = order.payments.every((p) => p.status === "PAGO");
+    const anyPaid = order.payments.some((p) => p.status === "PAGO");
+    if (allPaid)  return { label: "Pago",     className: "bg-green-100 text-green-700" };
+    if (anyPaid)  return { label: "Parcial",   className: "bg-yellow-100 text-yellow-700" };
+    return              { label: "Pendente",   className: "bg-red-100 text-red-600" };
   }
 
   function orderLabel(order: Order) {
@@ -521,8 +532,18 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
                           </p>
                         )}
 
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className="text-xs text-gray-400">{formatDate(order.createdAt)}</span>
+                        <div className="mt-2 flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-400">{formatDate(order.createdAt)}</span>
+                            {(() => {
+                              const tag = paymentTag(order);
+                              return tag ? (
+                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tag.className}`}>
+                                  {tag.label}
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
                           {showPrice && (
                             <span className="text-xs font-bold text-gray-800">
                               {formatCurrency(orderTotal(order))}

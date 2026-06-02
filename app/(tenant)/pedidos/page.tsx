@@ -22,6 +22,7 @@ export default async function PedidosPage() {
       items: {
         include: { product: { select: { name: true, unit: true } } },
       },
+      payments: { select: { status: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -40,6 +41,7 @@ export default async function PedidosPage() {
           quantity: Number(i.quantity),
           unitPrice: Number(i.unitPrice),
         })),
+        payments: o.payments.map((p) => ({ status: p.status })),
       }))}
       role={role}
       isClient={isClient}
