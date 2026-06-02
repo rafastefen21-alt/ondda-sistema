@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   Document, Page, Text, View, Image, StyleSheet,
-  renderToBuffer, Font,
+  renderToBuffer,
 } from "@react-pdf/renderer";
 import React from "react";
 
@@ -71,18 +71,9 @@ const styles = StyleSheet.create({
   cardName: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#0f172a", marginBottom: 3 },
   cardDesc: { fontSize: 8, color: "#64748b", marginBottom: 6, lineHeight: 1.4 },
 
-  // Prices
-  pricesRow: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  priceBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    backgroundColor: "#f5ece4",
-    borderWidth: 1,
-    borderColor: "#c8a882",
-  },
-  priceLabel: { fontSize: 6.5, color: "#92725a", marginBottom: 1 },
-  priceValue: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#5c3317" },
+  // Características
+  infoRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 },
+  infoText: { fontSize: 7.5, color: "#92725a" },
 
   // Footer
   footer: {
@@ -101,10 +92,6 @@ const styles = StyleSheet.create({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmtBRL(n: number) {
-  return `R$ ${n.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
-}
-
 function today() {
   return new Date().toLocaleDateString("pt-BR", {
     day: "2-digit", month: "long", year: "numeric",
@@ -117,14 +104,13 @@ interface ProductRow {
   id: string;
   name: string;
   description: string | null;
-  price: number;
-  unit: string;
-  pricePacote: number | null;
-  labelPacote: string | null;
-  priceCaixa: number | null;
-  labelCaixa: string | null;
   imageUrl: string | null;
   categoryName: string | null;
+  weightGrams: number | null;
+  diameterCm: number | null;
+  shelfLifeDays: number | null;
+  labelCaixa: string | null;
+  labelPacote: string | null;
 }
 
 interface TenantInfo {
@@ -205,39 +191,28 @@ function CatalogoPDF({ tenant, products }: { tenant: TenantInfo; products: Produ
                   ? React.createElement(Text, { style: styles.cardDesc }, p.description)
                   : null,
 
-                // Preços
-                React.createElement(
-                  View,
-                  { style: styles.pricesRow },
-
-                  // Unidade
-                  React.createElement(
-                    View,
-                    { style: styles.priceBadge },
-                    React.createElement(Text, { style: styles.priceLabel }, p.unit),
-                    React.createElement(Text, { style: styles.priceValue }, fmtBRL(p.price)),
-                  ),
-
-                  // Pacote
-                  p.pricePacote && p.labelPacote
-                    ? React.createElement(
-                        View,
-                        { style: styles.priceBadge },
-                        React.createElement(Text, { style: styles.priceLabel }, p.labelPacote),
-                        React.createElement(Text, { style: styles.priceValue }, fmtBRL(p.pricePacote)),
-                      )
-                    : null,
-
-                  // Caixa
-                  p.priceCaixa && p.labelCaixa
-                    ? React.createElement(
-                        View,
-                        { style: styles.priceBadge },
-                        React.createElement(Text, { style: styles.priceLabel }, p.labelCaixa),
-                        React.createElement(Text, { style: styles.priceValue }, fmtBRL(p.priceCaixa)),
-                      )
-                    : null,
-                ),
+                // Características
+                (p.weightGrams || p.diameterCm || p.shelfLifeDays || p.labelPacote || p.labelCaixa)
+                  ? React.createElement(
+                      View,
+                      { style: styles.infoRow },
+                      p.weightGrams
+                        ? React.createElement(Text, { style: styles.infoText }, `Peso - ${p.weightGrams} gr`)
+                        : null,
+                      p.diameterCm
+                        ? React.createElement(Text, { style: styles.infoText }, `Diâmetro - ${p.diameterCm} cm`)
+                        : null,
+                      p.shelfLifeDays
+                        ? React.createElement(Text, { style: styles.infoText }, `Validade - ${p.shelfLifeDays} dias`)
+                        : null,
+                      p.labelPacote
+                        ? React.createElement(Text, { style: styles.infoText }, `Pacote: ${p.labelPacote}`)
+                        : null,
+                      p.labelCaixa
+                        ? React.createElement(Text, { style: styles.infoText }, `Caixa: ${p.labelCaixa}`)
+                        : null,
+                    )
+                  : null,
               ),
             ),
           ),
@@ -287,16 +262,15 @@ export async function GET(_req: NextRequest) {
   if (!tenant) return NextResponse.json({ error: "Empresa não encontrada" }, { status: 404 });
 
   const productRows: ProductRow[] = products.map((p) => ({
-    id:          p.id,
-    name:        p.name,
-    description: p.description,
-    price:       Number(p.price),
-    unit:        p.unit,
-    pricePacote: p.pricePacote ? Number(p.pricePacote) : null,
-    labelPacote: p.labelPacote,
-    priceCaixa:  p.priceCaixa  ? Number(p.priceCaixa)  : null,
-    labelCaixa:  p.labelCaixa,
-    imageUrl:    p.imageUrl ?? null,
+    id:           p.id,
+    name:         p.name,
+    description:  p.description,
+    imageUrl:     p.imageUrl ?? null,
+    weightGrams:  p.weightGrams  ?? null,
+    diameterCm:   p.diameterCm   ? Number(p.diameterCm) : null,
+    shelfLifeDays: p.shelfLifeDays ?? null,
+    labelPacote:  p.labelPacote  ?? null,
+    labelCaixa:   p.labelCaixa   ?? null,
     categoryName: p.category?.name ?? null,
   }));
 
