@@ -36,9 +36,10 @@ export async function POST(
 
   const emailNorm = parsed.data.email.toLowerCase().trim();
 
+  // Aceita clientes E usuários internos (TENANT_ADMIN, GERENTE, OPERADOR)
   const user = await prisma.user.findFirst({
-    where: { email: emailNorm, tenantId: tenant.id, role: "CLIENTE" },
-    select: { id: true, name: true, email: true, password: true, active: true },
+    where: { email: emailNorm, tenantId: tenant.id },
+    select: { id: true, name: true, email: true, password: true, active: true, role: true },
   });
 
   if (!user || !user.password) {
@@ -56,11 +57,14 @@ export async function POST(
     select: { productId: true, price: true, pricePacote: true, priceCaixa: true },
   });
 
+  // Admins/internos sempre têm acesso completo na loja
+  const isInternal = user.role !== "CLIENTE";
+
   return NextResponse.json({
     id:     user.id,
     name:   user.name,
     email:  user.email,
-    active: user.active,
+    active: isInternal ? true : user.active,
     customPrices: customPrices.map((c) => ({
       productId:   c.productId,
       price:       c.price       ? Number(c.price)       : null,
