@@ -25,25 +25,25 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingBottom: 14,
     borderBottomWidth: 2,
-    borderBottomColor: "#1e3a8a",
+    borderBottomColor: "#5c3317",
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerLogo: { width: 48, height: 48, borderRadius: 8, objectFit: "cover" },
-  headerName: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#1e3a8a" },
-  headerSub: { fontSize: 9, color: "#64748b", marginTop: 2 },
-  headerDate: { fontSize: 8, color: "#94a3b8", textAlign: "right" },
+  headerName: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#5c3317" },
+  headerSub: { fontSize: 9, color: "#92725a", marginTop: 2 },
+  headerDate: { fontSize: 8, color: "#a08060", textAlign: "right" },
 
   // Category title
   categoryTitle: {
-    fontSize: 12,
+    fontSize: 15,
     fontFamily: "Helvetica-Bold",
-    color: "#1e3a8a",
-    backgroundColor: "#eff6ff",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    color: "#5c3317",
+    backgroundColor: "#f5ece4",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 4,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 20,
+    marginBottom: 10,
   },
 
   // Product grid — 2 columns
@@ -77,12 +77,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 2,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#f5ece4",
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: "#c8a882",
   },
-  priceLabel: { fontSize: 6.5, color: "#3b82f6", marginBottom: 1 },
-  priceValue: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#1e40af" },
+  priceLabel: { fontSize: 6.5, color: "#92725a", marginBottom: 1 },
+  priceValue: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#5c3317" },
 
   // Footer
   footer: {
@@ -93,10 +93,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: "#c8a882",
     paddingTop: 6,
   },
-  footerText: { fontSize: 7.5, color: "#94a3b8" },
+  footerText: { fontSize: 7.5, color: "#92725a" },
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
