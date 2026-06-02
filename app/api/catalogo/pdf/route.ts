@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#fff",
   },
-  cardImage: { width: "100%", height: 100, objectFit: "cover" },
+  cardImage: { width: "100%", height: 110, objectFit: "contain", backgroundColor: "#ffffff" },
   cardImagePlaceholder: {
     width: "100%",
     height: 100,
