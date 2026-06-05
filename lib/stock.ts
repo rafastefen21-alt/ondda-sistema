@@ -76,16 +76,18 @@ export async function deductStockForOrder(
   if (!order) return;
 
   await Promise.all(
-    order.items.map((item) =>
-      adjustStock({
+    order.items.map((item) => {
+      // Usa o tier label (salvo em notes) como unidade no motivo do movimento
+      const unitLabel = item.notes ?? "un";
+      return adjustStock({
         tenantId,
         productId: item.productId,
         delta:     -Number(item.quantity),
         type:      "SAIDA",
-        reason:    `Pedido aprovado #${orderId.slice(-8).toUpperCase()}`,
+        reason:    `Pedido #${orderId.slice(-8).toUpperCase()} — ${Number(item.quantity)} ${unitLabel}`,
         orderId,
-      }),
-    ),
+      });
+    }),
   );
 }
 

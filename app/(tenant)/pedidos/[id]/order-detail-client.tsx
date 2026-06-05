@@ -677,7 +677,7 @@ export function OrderDetailClient({
                         {item.product.name}
                       </p>
                       <p className="text-sm text-gray-400">
-                        {item.quantity} {item.product.unit}
+                        {item.quantity} {item.notes ?? item.product.unit}
                         {showPrice &&
                           ` × ${formatCurrency(item.unitPrice)}`}
                       </p>

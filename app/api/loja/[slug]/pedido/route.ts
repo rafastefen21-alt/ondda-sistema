@@ -66,6 +66,10 @@ export async function POST(
   const productIds = data.items.map((i) => i.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, tenantId: tenant.id, active: true },
+    select: {
+      id: true, price: true, pricePacote: true, priceCaixa: true,
+      labelPacote: true, labelCaixa: true, unit: true,
+    },
   });
 
   if (products.length !== productIds.length) {
@@ -154,10 +158,16 @@ export async function POST(
           if (item.tier === "pacote") unitPrice = custom?.pricePacote ?? p.pricePacote ?? unitPrice;
           if (item.tier === "caixa")  unitPrice = custom?.priceCaixa  ?? p.priceCaixa  ?? unitPrice;
 
+          // Tier label salvo em notes para exibição no pedido
+          let tierLabel: string | null = null;
+          if (item.tier === "caixa"  && p.labelCaixa)  tierLabel = p.labelCaixa;
+          if (item.tier === "pacote" && p.labelPacote)  tierLabel = p.labelPacote;
+
           return {
             productId: item.productId,
-            quantity: item.quantity,
+            quantity:  item.quantity,
             unitPrice,
+            notes: tierLabel,
           };
         }),
       },
