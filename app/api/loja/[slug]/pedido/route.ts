@@ -126,6 +126,13 @@ export async function POST(
     clientId = user.id;
   }
 
+  // Busca preços personalizados do cliente (se existirem)
+  const customPriceRows = await prisma.clientProductPrice.findMany({
+    where: { clientId, tenantId: tenant.id },
+    select: { productId: true, price: true, pricePacote: true, priceCaixa: true },
+  });
+  const customPriceMap = new Map(customPriceRows.map((c) => [c.productId, c]));
+
   // Build notes (append CNPJ if provided)
   const cnpjLine = data.type === "novo" && data.cnpj ? `CNPJ: ${data.cnpj}` : null;
   const notesText = [cnpjLine, data.notes].filter(Boolean).join("\n") || null;
@@ -139,10 +146,14 @@ export async function POST(
       notes: notesText,
       items: {
         create: data.items.map((item) => {
-          const p = productMap.get(item.productId)!;
-          let unitPrice = p.price;
-          if (item.tier === "pacote" && p.pricePacote) unitPrice = p.pricePacote;
-          if (item.tier === "caixa"  && p.priceCaixa)  unitPrice = p.priceCaixa;
+          const p      = productMap.get(item.productId)!;
+          const custom = customPriceMap.get(item.productId);
+
+          // Preço: customizado → padrão do produto (por tier)
+          let unitPrice = custom?.price       ?? p.price;
+          if (item.tier === "pacote") unitPrice = custom?.pricePacote ?? p.pricePacote ?? unitPrice;
+          if (item.tier === "caixa")  unitPrice = custom?.priceCaixa  ?? p.priceCaixa  ?? unitPrice;
+
           return {
             productId: item.productId,
             quantity: item.quantity,
