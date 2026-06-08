@@ -245,7 +245,8 @@ export function LojaClient({
   const cartItems = Object.values(cart);
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cartItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-  const belowMinimo = tenant.pedidoMinimo > 0 && cartTotal < tenant.pedidoMinimo;
+  // Pedido mínimo só se aplica a clientes aprovados (que já viram os preços)
+  const belowMinimo = lojaSession?.active === true && tenant.pedidoMinimo > 0 && cartTotal < tenant.pedidoMinimo;
 
   const filtered = products.filter((p) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
