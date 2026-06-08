@@ -25,7 +25,8 @@ const novoSchema = z.object({
   bairro:      z.string().optional(),
   city:        z.string().optional(),
   state:       z.string().optional(),
-  items: z.array(itemSchema).min(1),
+  // Itens opcionais: cliente pode só se cadastrar sem fazer pedido
+  items: z.array(itemSchema).default([]),
 });
 
 const existenteSchema = z.object({
@@ -62,9 +63,14 @@ export async function POST(
 
   const data = parsed.data;
 
+  // Se não há itens no carrinho (cadastro sem pedido), pular validação de produtos
+  if (data.items.length === 0 && data.type === "existente") {
+    return NextResponse.json({ error: "Selecione ao menos um produto." }, { status: 400 });
+  }
+
   // Validate all products belong to this tenant
   const productIds = data.items.map((i) => i.productId);
-  const products = await prisma.product.findMany({
+  const products = data.items.length === 0 ? [] : await prisma.product.findMany({
     where: { id: { in: productIds }, tenantId: tenant.id, active: true },
     select: {
       id: true, price: true, pricePacote: true, priceCaixa: true,
@@ -72,7 +78,7 @@ export async function POST(
     },
   });
 
-  if (products.length !== productIds.length) {
+  if (productIds.length > 0 && products.length !== productIds.length) {
     return NextResponse.json({ error: "Produto inválido no carrinho." }, { status: 400 });
   }
 
@@ -112,6 +118,11 @@ export async function POST(
       },
     });
     clientId = newUser.id;
+
+    // Cadastro sem itens: só criou a conta, sem pedido
+    if (data.items.length === 0) {
+      return NextResponse.json({ orderId: null }, { status: 201 });
+    }
   } else {
     // Existing user — verify credentials
     const user = await prisma.user.findFirst({

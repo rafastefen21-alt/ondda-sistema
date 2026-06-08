@@ -187,7 +187,7 @@ export function LojaClient({
   const [tab, setTab] = useState<CheckoutTab>("novo");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [orderInfo, setOrderInfo] = useState<{ id: string; email: string } | null>(null);
+  const [orderInfo, setOrderInfo] = useState<{ id: string | null; email: string } | null>(null);
 
   const [form, setForm] = useState({
     name: "", email: "", password: "", phone: "", cnpj: "", notes: "",
@@ -317,41 +317,65 @@ export function LojaClient({
     }
 
     const json = await res.json();
-    setOrderInfo({ id: json.orderId, email: tab === "novo" ? form.email : form.loginEmail });
+    setOrderInfo({ id: json.orderId ?? null, email: tab === "novo" ? form.email : form.loginEmail });
     setStep("sucesso");
   }
 
   // ── Success screen ──────────────────────────────────────────────────────────
   if (step === "sucesso" && orderInfo) {
+    const isOnlyRegistration = !orderInfo.id;
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
         <div className="w-full max-w-md text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <CheckCircle2 className="h-8 w-8 text-green-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Pedido enviado!</h1>
-          <p className="mt-2 text-gray-500">
-            Seu pedido foi recebido e está aguardando aprovação.
-            Você será notificado sobre o andamento.
-          </p>
 
-          <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5 text-left">
-            <p className="text-sm text-gray-500">Número do pedido</p>
-            <p className="mt-1 font-mono text-sm font-semibold text-gray-900">
-              #{orderInfo.id.slice(-8).toUpperCase()}
-            </p>
-            <p className="mt-3 text-sm text-gray-500">
-              Use o email <strong>{orderInfo.email}</strong> e sua senha para acompanhar o pedido.
-            </p>
-          </div>
-
-          <a
-            href={`/login?callbackUrl=/pedidos/${orderInfo.id}`}
-            className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-blue-800 px-6 py-3 font-medium text-white hover:bg-blue-900"
-          >
-            Acompanhar pedido
-            <ChevronRight className="h-4 w-4" />
-          </a>
+          {isOnlyRegistration ? (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900">Cadastro realizado!</h1>
+              <p className="mt-2 text-gray-500">
+                Seu cadastro está sendo analisado. Em breve você receberá acesso
+                para ver os preços e fazer pedidos.
+              </p>
+              <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5 text-left">
+                <p className="text-sm text-gray-500">
+                  Acesso com o email <strong>{orderInfo.email}</strong> assim que sua conta for aprovada.
+                </p>
+              </div>
+              <button
+                onClick={() => setStep("catalogo")}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-800 px-6 py-3 font-medium text-white hover:bg-blue-900"
+              >
+                Voltar à loja
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900">Pedido enviado!</h1>
+              <p className="mt-2 text-gray-500">
+                Seu pedido foi recebido e está aguardando aprovação.
+                Você será notificado sobre o andamento.
+              </p>
+              <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5 text-left">
+                <p className="text-sm text-gray-500">Número do pedido</p>
+                <p className="mt-1 font-mono text-sm font-semibold text-gray-900">
+                  #{orderInfo.id!.slice(-8).toUpperCase()}
+                </p>
+                <p className="mt-3 text-sm text-gray-500">
+                  Use o email <strong>{orderInfo.email}</strong> e sua senha para acompanhar o pedido.
+                </p>
+              </div>
+              <a
+                href={`/login?callbackUrl=/pedidos/${orderInfo.id}`}
+                className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-blue-800 px-6 py-3 font-medium text-white hover:bg-blue-900"
+              >
+                Acompanhar pedido
+                <ChevronRight className="h-4 w-4" />
+              </a>
+            </>
+          )}
         </div>
       </div>
     );
@@ -693,9 +717,17 @@ export function LojaClient({
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={loading || cartItems.length === 0 || belowMinimo}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={loading || (tab === "existente" && cartItems.length === 0) || belowMinimo}
+                >
                   <Send className="h-4 w-4" />
-                  {loading ? "Enviando..." : "Enviar Pedido"}
+                  {loading
+                    ? "Enviando..."
+                    : tab === "novo" && cartItems.length === 0
+                      ? "Fazer Cadastro"
+                      : "Enviar Pedido"}
                 </Button>
               </form>
             </CardContent>
