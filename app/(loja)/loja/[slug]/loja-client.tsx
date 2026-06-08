@@ -918,9 +918,9 @@ export function LojaClient({
                 onClick={() => { setShowLoginPanel(false); setStep("checkout"); }}
                 className="font-semibold underline"
               >
-                Faça seu pedido
+                Faça seu primeiro cadastro
               </button>{" "}
-              e aguarde a aprovação.
+              para ver os preços.
             </p>
           </div>
         ) : (
