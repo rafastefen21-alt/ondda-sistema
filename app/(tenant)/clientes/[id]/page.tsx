@@ -14,6 +14,7 @@ import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS,
 } from "@/lib/utils";
 import { PrecosCard } from "./precos-card";
+import { CredenciaisCard } from "./credenciais-card";
 
 export default async function ClienteDetailPage({
   params,
@@ -235,6 +236,9 @@ export default async function ClienteDetailPage({
               </CardContent>
             </Card>
           )}
+
+          {/* Credenciais de acesso */}
+          <CredenciaisCard clientId={id} email={client.email} />
 
           {/* Observações */}
           {client.observacoes && (
