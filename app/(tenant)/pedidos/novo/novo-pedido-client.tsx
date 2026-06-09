@@ -21,8 +21,19 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  pricePacote: number | null;
+  priceCaixa:  number | null;
+  labelPacote: string | null;
+  labelCaixa:  string | null;
   unit: string;
   category: string | null;
+}
+
+interface CustomPrice {
+  productId:   string;
+  price:       number | null;
+  pricePacote: number | null;
+  priceCaixa:  number | null;
 }
 
 interface OrderItem {
@@ -52,8 +63,10 @@ export function NovoPedidoClient({
 }) {
   const router = useRouter();
 
-  const [clientId,   setClientId]   = useState("");
-  const [status,     setStatus]     = useState("PENDENTE_APROVACAO");
+  const [clientId,      setClientId]      = useState("");
+  const [customPrices,  setCustomPrices]  = useState<Map<string, CustomPrice>>(new Map());
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [status,        setStatus]        = useState("PENDENTE_APROVACAO");
   const [payment,    setPayment]    = useState("");
   const [reqDate,    setReqDate]    = useState("");
   const [delivDate,  setDelivDate]  = useState("");
@@ -65,6 +78,41 @@ export function NovoPedidoClient({
   ]);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState("");
+
+  // ── Busca preços customizados ao trocar de cliente ───────────────────────────
+
+  async function handleClientChange(id: string) {
+    setClientId(id);
+    setCustomPrices(new Map());
+    if (!id) return;
+
+    setLoadingPrices(true);
+    try {
+      const res  = await fetch(`/api/clientes/${id}/precos`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        const map = new Map<string, CustomPrice>();
+        for (const cp of data) map.set(cp.productId, cp);
+        setCustomPrices(map);
+
+        // Atualiza preços dos itens já adicionados
+        setItems((prev) =>
+          prev.map((item) => {
+            if (!item.productId) return item;
+            const custom  = map.get(item.productId);
+            const product = products.find((p) => p.id === item.productId);
+            if (!product) return item;
+            const unitPrice = custom?.price ?? product.price;
+            return { ...item, unitPrice };
+          })
+        );
+      }
+    } catch {
+      // silencioso — usa preços padrão
+    } finally {
+      setLoadingPrices(false);
+    }
+  }
 
   // ── Item helpers ─────────────────────────────────────────────────────────────
 
@@ -84,13 +132,20 @@ export function NovoPedidoClient({
 
   function selectProduct(idx: number, productId: string) {
     const product = products.find((p) => p.id === productId);
+    const custom  = customPrices.get(productId);
+    // Usa preço customizado do cliente se existir, senão o padrão do produto
+    const unitPrice = custom?.price ?? product?.price ?? 0;
     setItems((prev) =>
       prev.map((item, i) =>
-        i === idx
-          ? { ...item, productId, unitPrice: product?.price ?? 0 }
-          : item
+        i === idx ? { ...item, productId, unitPrice } : item
       )
     );
+  }
+
+  // Helper: retorna se um item está usando preço especial
+  function hasCustomPrice(productId: string): boolean {
+    const cp = customPrices.get(productId);
+    return !!(cp && cp.price !== null);
   }
 
   // ── Total ────────────────────────────────────────────────────────────────────
@@ -192,7 +247,7 @@ export function NovoPedidoClient({
                 <select
                   id="client"
                   value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
+                  onChange={(e) => handleClientChange(e.target.value)}
                   className={selectClass}
                   required
                 >
@@ -203,6 +258,14 @@ export function NovoPedidoClient({
                     </option>
                   ))}
                 </select>
+                {loadingPrices && (
+                  <p className="mt-1 text-xs text-blue-600">Carregando tabela de preços do cliente...</p>
+                )}
+                {!loadingPrices && customPrices.size > 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    ✦ Este cliente tem {customPrices.size} preço(s) especial(is) — aplicados automaticamente.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -314,7 +377,14 @@ export function NovoPedidoClient({
 
                   {/* Unit price */}
                   <div className="space-y-1 w-28">
-                    <label className="text-xs font-medium text-gray-500">Preço unit.</label>
+                    <label className="text-xs font-medium text-gray-500 flex items-center gap-1">
+                      Preço unit.
+                      {item.productId && hasCustomPrice(item.productId) && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          especial
+                        </span>
+                      )}
+                    </label>
                     <div className="relative">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">R$</span>
                       <Input
@@ -323,7 +393,7 @@ export function NovoPedidoClient({
                         step="0.01"
                         value={item.unitPrice}
                         onChange={(e) => updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)}
-                        className="pl-7"
+                        className={`pl-7 ${item.productId && hasCustomPrice(item.productId) ? "border-amber-300 bg-amber-50" : ""}`}
                       />
                     </div>
                   </div>

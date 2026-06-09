@@ -34,11 +34,15 @@ export default async function NovoPedidoPage() {
         role: c.role,
       }))}
       products={products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        price: Number(p.price),
-        unit: p.unit,
-        category: p.category?.name ?? null,
+        id:          p.id,
+        name:        p.name,
+        price:       Number(p.price),
+        pricePacote: p.pricePacote ? Number(p.pricePacote) : null,
+        priceCaixa:  p.priceCaixa  ? Number(p.priceCaixa)  : null,
+        labelPacote: p.labelPacote ?? null,
+        labelCaixa:  p.labelCaixa  ?? null,
+        unit:        p.unit,
+        category:    p.category?.name ?? null,
       }))}
       role={role}
     />
