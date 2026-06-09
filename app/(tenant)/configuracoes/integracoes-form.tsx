@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   CheckCircle, CreditCard, Eye, EyeOff, Link2, FileText,
-  AlertCircle, User, LogOut, Loader2, Mail,
+  AlertCircle, User, LogOut, Loader2, Mail, MessageCircle,
 } from "lucide-react";
 
 const selectClass =
@@ -29,6 +29,8 @@ interface Props {
     focusNfeToken:  string | null;
     nfeAmbiente:    string | null;
     emailRemetente: string | null;
+    zapiInstanceId: string | null;
+    zapiToken:      string | null;
   };
 }
 
@@ -92,6 +94,16 @@ export function IntegracoesForm({ initial }: Props) {
   const [loadingEmail,   setLoadingEmail]   = useState(false);
   const [successEmail,   setSuccessEmail]   = useState(false);
   const [errorEmail,     setErrorEmail]     = useState("");
+
+  // ── Z-API state ───────────────────────────────────────────────────────────────
+  const [zapiInstanceId,  setZapiInstanceId]  = useState(initial.zapiInstanceId ?? "");
+  const [zapiToken,       setZapiToken]       = useState(initial.zapiToken ?? "");
+  const [showZapiToken,   setShowZapiToken]   = useState(false);
+  const [loadingZapi,     setLoadingZapi]     = useState(false);
+  const [successZapi,     setSuccessZapi]     = useState(false);
+  const [errorZapi,       setErrorZapi]       = useState("");
+  const [testingZapi,     setTestingZapi]     = useState(false);
+  const [testResultZapi,  setTestResultZapi]  = useState<{ ok: boolean; msg: string } | null>(null);
 
   // ── Salvar credenciais MP manualmente ────────────────────────────────────────
   async function saveMp(e: React.FormEvent) {
@@ -175,7 +187,51 @@ export function IntegracoesForm({ initial }: Props) {
     }
   }
 
-  const nfeConfigured = !!initial.focusNfeToken;
+  // ── Salvar Z-API ─────────────────────────────────────────────────────────────
+  async function saveZapi(e: React.FormEvent) {
+    e.preventDefault();
+    setLoadingZapi(true);
+    setErrorZapi("");
+    setSuccessZapi(false);
+    setTestResultZapi(null);
+    const res = await fetch("/api/configuracoes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        zapiInstanceId: zapiInstanceId || null,
+        zapiToken:      zapiToken      || null,
+      }),
+    });
+    setLoadingZapi(false);
+    if (!res.ok) {
+      setErrorZapi("Erro ao salvar. Verifique os dados.");
+    } else {
+      setSuccessZapi(true);
+      router.refresh();
+      setTimeout(() => setSuccessZapi(false), 3000);
+    }
+  }
+
+  async function testZapi() {
+    setTestingZapi(true);
+    setTestResultZapi(null);
+    try {
+      const res = await fetch("/api/zapi/test", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.connected) {
+        setTestResultZapi({ ok: true, msg: "WhatsApp conectado e pronto para disparos!" });
+      } else {
+        setTestResultZapi({ ok: false, msg: data.error ?? "Instância desconectada. Escaneie o QR code no painel Z-API." });
+      }
+    } catch {
+      setTestResultZapi({ ok: false, msg: "Não foi possível conectar à Z-API." });
+    } finally {
+      setTestingZapi(false);
+    }
+  }
+
+  const nfeConfigured  = !!initial.focusNfeToken;
+  const zapiConfigured = !!(initial.zapiInstanceId && initial.zapiToken);
 
   return (
     <div className="space-y-4">
@@ -478,6 +534,123 @@ export function IntegracoesForm({ initial }: Props) {
                 {loadingEmail ? "Salvando..." : "Salvar e-mail"}
               </Button>
               {successEmail && (
+                <span className="flex items-center gap-1 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Salvo com sucesso!
+                </span>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      {/* ── Z-API (WhatsApp) ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MessageCircle className="h-5 w-5 text-green-500" />
+            WhatsApp — Z-API
+            <span
+              className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
+                zapiConfigured ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {zapiConfigured ? "Configurado" : "Pendente"}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-gray-500">
+            Envie mensagens e faça disparos em massa pelo WhatsApp diretamente do sistema.
+            Acesse{" "}
+            <a
+              href="https://app.z-api.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-gray-700"
+            >
+              app.z-api.io
+            </a>{" "}
+            para obter o Instance ID e Token.
+          </p>
+
+          <form onSubmit={saveZapi} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="zapiInstanceId">Instance ID</Label>
+              <Input
+                id="zapiInstanceId"
+                placeholder="Ex: 3C9B2C1D4E5F6..."
+                value={zapiInstanceId}
+                onChange={(e) => setZapiInstanceId(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="text-xs text-gray-400">
+                Encontrado em: Instâncias → sua instância → &quot;Instance ID&quot;.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="zapiToken">Token</Label>
+              <div className="relative">
+                <Input
+                  id="zapiToken"
+                  type={showZapiToken ? "text" : "password"}
+                  placeholder="Token de segurança da instância"
+                  value={zapiToken}
+                  onChange={(e) => setZapiToken(e.target.value)}
+                  autoComplete="off"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowZapiToken(!showZapiToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showZapiToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">
+                Token de API da instância — diferente do Client-Token de webhook.
+              </p>
+            </div>
+
+            {errorZapi && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{errorZapi}</p>
+            )}
+
+            {testResultZapi && (
+              <div
+                className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm ${
+                  testResultZapi.ok
+                    ? "border border-green-200 bg-green-50 text-green-700"
+                    : "border border-amber-200 bg-amber-50 text-amber-700"
+                }`}
+              >
+                {testResultZapi.ok
+                  ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <span>{testResultZapi.msg}</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={loadingZapi}>
+                {loadingZapi ? "Salvando..." : "Salvar Z-API"}
+              </Button>
+              {zapiConfigured && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={testingZapi}
+                  onClick={testZapi}
+                >
+                  {testingZapi ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Testando...</>
+                  ) : (
+                    "Testar conexão"
+                  )}
+                </Button>
+              )}
+              {successZapi && (
                 <span className="flex items-center gap-1 text-sm text-green-600">
                   <CheckCircle className="h-4 w-4" />
                   Salvo com sucesso!

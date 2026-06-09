@@ -174,6 +174,8 @@ export default async function ConfiguracoesPage() {
                 focusNfeToken:  tenant.focusNfeToken  ?? null,
                 nfeAmbiente:    tenant.nfeAmbiente    ?? null,
                 emailRemetente: tenant.emailRemetente ?? null,
+                zapiInstanceId: tenant.zapiInstanceId ?? null,
+                zapiToken:      tenant.zapiToken      ?? null,
               }}
             />
           )}

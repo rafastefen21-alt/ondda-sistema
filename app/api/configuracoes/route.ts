@@ -31,6 +31,9 @@ const schema = z.object({
   codigoCidade:     z.string().optional().nullable(),
   phone:            z.string().optional().nullable(),
   emailRemetente:   z.string().max(200).optional().nullable(),
+  // Z-API (WhatsApp)
+  zapiInstanceId:   z.string().optional().nullable(),
+  zapiToken:        z.string().optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -80,6 +83,8 @@ export async function PATCH(req: NextRequest) {
       ...(d.codigoCidade     !== undefined ? { codigoCidade:     d.codigoCidade     || null } : {}),
       ...(d.phone            !== undefined ? { phone:            d.phone            || null } : {}),
       ...(d.emailRemetente   !== undefined ? { emailRemetente:   d.emailRemetente   || null } : {}),
+      ...(d.zapiInstanceId   !== undefined ? { zapiInstanceId:   d.zapiInstanceId   || null } : {}),
+      ...(d.zapiToken        !== undefined ? { zapiToken:        d.zapiToken        || null } : {}),
     },
   });
 

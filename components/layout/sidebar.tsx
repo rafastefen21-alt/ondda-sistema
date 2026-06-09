@@ -21,6 +21,7 @@ import {
   ChevronDown,
   HelpCircle,
   Warehouse,
+  MessageCircle,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,12 @@ const navItems: NavItem[] = [
     href: "/notas",
     label: "Notas Fiscais",
     icon: FileText,
+    roles: ["TENANT_ADMIN", "GERENTE"],
+  },
+  {
+    href: "/whatsapp",
+    label: "WhatsApp",
+    icon: MessageCircle,
     roles: ["TENANT_ADMIN", "GERENTE"],
   },
   {
