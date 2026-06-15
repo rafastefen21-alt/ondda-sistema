@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.errors[0]?.message ?? "Dados inválidos" },
+      { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
       { status: 400 },
     );
   }
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         nomeFantasia: r.nomeFantasia ?? undefined,
       });
       const result = await zapiSendText(cfg, r.phone, text);
-      return { clientId: r.clientId, nome: r.nome, phone: r.phone, ...result };
+      return { clientId: r.clientId, nome: r.nome, phone: r.phone, success: result.success, error: result.error };
     }),
   );
 
