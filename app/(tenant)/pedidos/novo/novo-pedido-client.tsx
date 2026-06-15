@@ -352,11 +352,16 @@ export function NovoPedidoClient({
                       <option value="">Selecione...</option>
                       {Object.entries(grouped).map(([cat, prods]) => (
                         <optgroup key={cat} label={cat}>
-                          {prods.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} ({p.unit}) — {formatCurrency(p.price)}
-                            </option>
-                          ))}
+                          {prods.map((p) => {
+                            const custom = customPrices.get(p.id);
+                            const displayPrice = custom?.price ?? p.price;
+                            const isSpecial = custom?.price != null;
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.unit}) — {formatCurrency(displayPrice)}{isSpecial ? " ★" : ""}
+                              </option>
+                            );
+                          })}
                         </optgroup>
                       ))}
                     </select>

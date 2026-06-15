@@ -15,7 +15,7 @@ export default async function NovoPedidoPage() {
   const [clients, products] = await Promise.all([
     prisma.user.findMany({
       where: { tenantId, active: true },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, nomeFantasia: true, email: true, role: true },
       orderBy: { name: "asc" },
     }),
     prisma.product.findMany({
@@ -29,7 +29,7 @@ export default async function NovoPedidoPage() {
     <NovoPedidoClient
       clients={clients.map((c) => ({
         id: c.id,
-        name: c.name,
+        name: c.nomeFantasia ?? c.name,
         email: c.email,
         role: c.role,
       }))}
