@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import { z } from "zod";
 
 const schema = z.object({
@@ -35,7 +36,7 @@ const schema = z.object({
   zapiInstanceId:   z.string().optional().nullable(),
   zapiToken:        z.string().optional().nullable(),
   // Notificações automáticas
-  notificacoes:     z.record(z.unknown()).optional().nullable(),
+  notificacoes:     z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -87,7 +88,9 @@ export async function PATCH(req: NextRequest) {
       ...(d.emailRemetente   !== undefined ? { emailRemetente:   d.emailRemetente   || null } : {}),
       ...(d.zapiInstanceId   !== undefined ? { zapiInstanceId:   d.zapiInstanceId   || null } : {}),
       ...(d.zapiToken        !== undefined ? { zapiToken:        d.zapiToken        || null } : {}),
-      ...(d.notificacoes     !== undefined ? { notificacoes:     d.notificacoes     ?? null } : {}),
+      ...(d.notificacoes !== undefined
+        ? { notificacoes: d.notificacoes != null ? (d.notificacoes as Prisma.InputJsonValue) : Prisma.DbNull }
+        : {}),
     },
   });
 

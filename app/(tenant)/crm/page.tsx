@@ -29,10 +29,13 @@ export default async function CrmPage() {
 
   const zapiConfigured = !!(tenant?.zapiInstanceId && tenant?.zapiToken);
 
+  const serialize = (cards: typeof novosCards) =>
+    cards.map((c) => ({ ...c, createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString() }));
+
   return (
     <CrmClient
-      initialNovos={novosCards}
-      initialPosVenda={posVendaCards}
+      initialNovos={serialize(novosCards)}
+      initialPosVenda={serialize(posVendaCards)}
       zapiConfigured={zapiConfigured}
       lojaSlug={tenant?.slug ?? ""}
     />
