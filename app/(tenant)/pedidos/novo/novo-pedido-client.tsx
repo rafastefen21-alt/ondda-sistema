@@ -354,11 +354,15 @@ export function NovoPedidoClient({
                         <optgroup key={cat} label={cat}>
                           {prods.map((p) => {
                             const custom = customPrices.get(p.id);
-                            const displayPrice = custom?.price ?? p.price;
-                            const isSpecial = custom?.price != null;
+                            const displayPrice =
+                              custom?.priceCaixa ?? p.priceCaixa ??
+                              custom?.pricePacote ?? p.pricePacote ??
+                              custom?.price ?? p.price;
+                            const displayLabel = p.labelCaixa ?? p.labelPacote ?? p.unit;
+                            const isSpecial = !!(custom?.priceCaixa ?? custom?.pricePacote ?? custom?.price);
                             return (
                               <option key={p.id} value={p.id}>
-                                {p.name} ({p.unit}) — {formatCurrency(displayPrice)}{isSpecial ? " ★" : ""}
+                                {p.name} ({displayLabel}) — {formatCurrency(displayPrice)}{isSpecial ? " ★" : ""}
                               </option>
                             );
                           })}
