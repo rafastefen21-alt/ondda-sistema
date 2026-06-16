@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, Clock,
-  Mail, User, CalendarDays, ShoppingBag, MapPin, FileText, Truck,
+  Mail, Phone, User, CalendarDays, ShoppingBag, MapPin, FileText, Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,6 +21,7 @@ interface Client {
   id: string;
   name: string | null;
   email: string;
+  phone: string | null;
   createdAt: Date;
   active: boolean;
   totalOrders: number;
@@ -249,6 +250,15 @@ export function AprovacoesClient({ orders: initialOrders }: { orders: Order[] })
                           <p className="text-sm font-medium text-gray-900">{order.client.email}</p>
                         </div>
                       </div>
+                      {order.client.phone && (
+                        <div className="flex items-start gap-2">
+                          <Phone className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                          <div>
+                            <p className="text-xs text-gray-400">Telefone</p>
+                            <p className="text-sm font-medium text-gray-900">{order.client.phone}</p>
+                          </div>
+                        </div>
+                      )}
                       {cnpj && (
                         <div className="flex items-start gap-2">
                           <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />

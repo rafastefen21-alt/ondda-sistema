@@ -18,7 +18,7 @@ export default async function AprovacoesPage() {
     include: {
       client: {
         select: {
-          id: true, name: true, email: true,
+          id: true, name: true, nomeFantasia: true, email: true, phone: true,
           createdAt: true, active: true,
           _count: { select: { orders: true } },
         },
@@ -40,8 +40,9 @@ export default async function AprovacoesPage() {
         deliveryAddress: o.deliveryAddress,
         client: {
           id: o.client.id,
-          name: o.client.name,
+          name: o.client.nomeFantasia ?? o.client.name,
           email: o.client.email,
+          phone: o.client.phone ?? null,
           createdAt: o.client.createdAt,
           active: o.client.active,
           totalOrders: o.client._count.orders,
