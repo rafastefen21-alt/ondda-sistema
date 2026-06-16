@@ -9,6 +9,7 @@ import {
   type NfeOrder,
   type NfeTenant,
 } from "@/lib/nfe";
+import { sendNfeEmail } from "@/lib/email";
 
 // ─── POST /api/pedidos/[id]/emitir-nfe ───────────────────────────────────────
 // Emite a NF-e do pedido via Focus NF-e.
@@ -209,6 +210,18 @@ export async function POST(
         : null,
     },
   });
+
+  // ── 9. Envia email com DANFE se NF-e já saiu autorizada ──────────────────
+  if (updated.status === "EMITIDA") {
+    const recipients = [order.client.email].filter(Boolean) as string[];
+    sendNfeEmail(
+      recipients,
+      tenant.name,
+      order.client.name ?? order.client.email,
+      order.id,
+      updated.pdfUrl,
+    ).catch((err) => console.error("[EMAIL] falha NF-e:", err));
+  }
 
   return NextResponse.json({ invoice: updated, focusData }, { status: 201 });
 }

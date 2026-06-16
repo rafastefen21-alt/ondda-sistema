@@ -195,6 +195,101 @@ function orderStatusHtml(data: OrderEmailData): string {
 </html>`;
 }
 
+// ─── Template NF-e emitida ────────────────────────────────────────────────────
+
+function nfeEmitidaHtml(tenantName: string, clientName: string, shortId: string, danfeUrl?: string | null): string {
+  const danfeBtn = danfeUrl
+    ? `<p style="text-align:center; margin:24px 0 0;">
+        <a href="${danfeUrl}"
+           style="display:inline-block; background:#1e40af; color:#fff; text-decoration:none;
+                  font-size:14px; font-weight:600; padding:12px 28px; border-radius:8px;">
+          Baixar DANFE (PDF)
+        </a>
+       </p>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0; padding:0; background:#f9fafb; font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="background:#fff; border-radius:12px; overflow:hidden;
+                    border:1px solid #e5e7eb; max-width:560px; width:100%;">
+        <tr>
+          <td style="background:#1e40af; padding:24px 32px; text-align:center;">
+            <p style="margin:0; font-size:18px; font-weight:700; color:#fff;">${tenantName}</p>
+            <p style="margin:4px 0 0; font-size:13px; color:#bfdbfe;">Nota Fiscal Eletrônica emitida</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 0; text-align:center;">
+            <span style="display:inline-block; background:#16a34a18; color:#16a34a;
+                         border:1px solid #16a34a40; border-radius:999px; padding:6px 20px;
+                         font-size:15px; font-weight:700;">
+              NF-e Autorizada ✅
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px;">
+            <p style="margin:0 0 16px; font-size:15px; color:#374151;">
+              Olá, <strong>${clientName}</strong>!
+            </p>
+            <p style="margin:0 0 20px; font-size:14px; color:#6b7280;">
+              A Nota Fiscal Eletrônica referente ao pedido <strong>#${shortId}</strong>
+              foi emitida e autorizada pela SEFAZ.
+            </p>
+            ${danfeBtn}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px 24px; border-top:1px solid #f3f4f6; text-align:center;">
+            <p style="margin:0; font-size:12px; color:#9ca3af;">
+              Este email foi enviado automaticamente por ${tenantName}.<br>
+              Guarde a DANFE como comprovante fiscal.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendNfeEmail(
+  to: string | string[],
+  tenantName: string,
+  clientName: string,
+  orderId: string,
+  danfeUrl?: string | null,
+  fromOverride?: string | null,
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[EMAIL] RESEND_API_KEY não configurada — NF-e email não enviado.");
+    return;
+  }
+  const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean) as string[];
+  if (recipients.length === 0) return;
+
+  const shortId = orderId.slice(-8).toUpperCase();
+  const fromAddress = fromOverride?.trim() || FROM;
+
+  try {
+    await getResend().emails.send({
+      from:    fromAddress,
+      to:      recipients,
+      subject: `NF-e emitida — Pedido #${shortId} | ${tenantName}`,
+      html:    nfeEmitidaHtml(tenantName, clientName, shortId, danfeUrl),
+    });
+    console.log("[EMAIL] NF-e enviada para", recipients);
+  } catch (err) {
+    console.error("[EMAIL] erro ao enviar NF-e:", err);
+  }
+}
+
 // ─── Template reset de senha ─────────────────────────────────────────────────
 
 function resetPasswordHtml(name: string, resetUrl: string): string {
