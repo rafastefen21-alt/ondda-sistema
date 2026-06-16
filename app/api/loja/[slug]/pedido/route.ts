@@ -141,6 +141,13 @@ export async function POST(
       return NextResponse.json({ error: "Email ou senha inválidos." }, { status: 401 });
     }
 
+    if (!user.active) {
+      return NextResponse.json(
+        { error: "Sua conta ainda está aguardando aprovação da distribuidora. Entraremos em contato em breve." },
+        { status: 403 },
+      );
+    }
+
     clientId = user.id;
   }
 

@@ -27,11 +27,19 @@ export async function POST(
       items: {
         include: { product: { select: { name: true } } },
       },
+      payments: { where: { status: { in: ["PENDENTE", "PAGO"] } }, select: { id: true } },
     },
   });
 
   if (!order) {
     return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
+  }
+
+  if (order.payments.length > 0) {
+    return NextResponse.json(
+      { error: "Já existe uma cobrança ativa para este pedido." },
+      { status: 409 },
+    );
   }
 
   if (["CANCELADO", "RASCUNHO"].includes(order.status)) {
@@ -78,7 +86,7 @@ export async function POST(
   // Try to generate MP checkout link
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { mpAccessToken: true, name: true },
+    select: { mpAccessToken: true, name: true, emailRemetente: true },
   });
 
   if (!tenant?.mpAccessToken) {
@@ -119,19 +127,12 @@ export async function POST(
       },
     });
 
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { mpPaymentId: preference.id?.toString() ?? null },
-    });
+    // Não armazena preference.id em mpPaymentId — o webhook usa external_reference
+    // e atualiza mpPaymentId com o real MP Payment ID quando processa o pagamento.
 
     const checkoutUrl = preference.sandbox_init_point ?? preference.init_point ?? null;
 
-    // Envia email de cobrança com link de pagamento
     if (checkoutUrl) {
-      const tenantWithEmail = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { emailRemetente: true },
-      });
       const recipients = [
         order.client.decisorEmail,
         order.client.email,
@@ -144,7 +145,7 @@ export async function POST(
         total,
         checkoutUrl,
         payment.dueDate,
-        tenantWithEmail?.emailRemetente,
+        tenant.emailRemetente,
       ).catch((e) => console.error("[cobrar] email erro:", e));
     }
 

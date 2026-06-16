@@ -10,6 +10,7 @@ import {
   type NfeTenant,
 } from "@/lib/nfe";
 import { sendNfeEmail } from "@/lib/email";
+import { mergeNotificacoes } from "@/lib/notificacoes";
 
 // ─── POST /api/pedidos/[id]/emitir-nfe ───────────────────────────────────────
 // Emite a NF-e do pedido via Focus NF-e.
@@ -73,7 +74,7 @@ export async function POST(
       name: true, cnpj: true, ie: true, cnae: true, regimeTributario: true,
       cep: true, logradouro: true, numero: true, complemento: true,
       bairro: true, city: true, state: true, codigoCidade: true, phone: true,
-      focusNfeToken: true, nfeAmbiente: true,
+      focusNfeToken: true, nfeAmbiente: true, emailRemetente: true, notificacoes: true,
     },
   });
 
@@ -213,14 +214,18 @@ export async function POST(
 
   // ── 9. Envia email com DANFE se NF-e já saiu autorizada ──────────────────
   if (updated.status === "EMITIDA") {
-    const recipients = [order.client.email].filter(Boolean) as string[];
-    sendNfeEmail(
-      recipients,
-      tenant.name,
-      order.client.name ?? order.client.email,
-      order.id,
-      updated.pdfUrl,
-    ).catch((err) => console.error("[EMAIL] falha NF-e:", err));
+    const notif = mergeNotificacoes(tenant.notificacoes);
+    if (notif.email.nfeEmitida) {
+      const recipients = [order.client.email].filter(Boolean) as string[];
+      sendNfeEmail(
+        recipients,
+        tenant.name,
+        order.client.name ?? order.client.email,
+        order.id,
+        updated.pdfUrl,
+        tenant.emailRemetente,
+      ).catch((err) => console.error("[EMAIL] falha NF-e:", err));
+    }
   }
 
   return NextResponse.json({ invoice: updated, focusData }, { status: 201 });

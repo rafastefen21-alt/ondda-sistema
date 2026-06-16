@@ -79,12 +79,9 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       },
     });
 
+    // Não armazena preference.id em mpPaymentId — o webhook usa external_reference
+    // e atualiza mpPaymentId com o real MP Payment ID quando processa o pagamento.
     const checkoutUrl = preference.sandbox_init_point ?? preference.init_point ?? null;
-
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { mpPaymentId: preference.id?.toString() ?? null },
-    });
 
     if (checkoutUrl) {
       const notif = mergeNotificacoes(tenant.notificacoes);
