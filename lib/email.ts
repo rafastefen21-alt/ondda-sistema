@@ -195,6 +195,178 @@ function orderStatusHtml(data: OrderEmailData): string {
 </html>`;
 }
 
+// ─── Template cobrança (link de pagamento) ───────────────────────────────────
+
+function cobrancaHtml(
+  tenantName: string,
+  clientName: string,
+  shortId: string,
+  total: number,
+  checkoutUrl: string,
+  dueDate?: Date | null,
+): string {
+  const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const dueLine = dueDate
+    ? `<p style="margin:0 0 8px; font-size:14px; color:#374151;"><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleDateString("pt-BR")}</p>`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0; padding:0; background:#f9fafb; font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="background:#fff; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; max-width:560px; width:100%;">
+        <tr>
+          <td style="background:#1e40af; padding:24px 32px; text-align:center;">
+            <p style="margin:0; font-size:18px; font-weight:700; color:#fff;">${tenantName}</p>
+            <p style="margin:4px 0 0; font-size:13px; color:#bfdbfe;">Cobrança — Pedido #${shortId}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 0; text-align:center;">
+            <span style="display:inline-block; background:#d9770618; color:#d97706;
+                         border:1px solid #d9770640; border-radius:999px; padding:6px 20px;
+                         font-size:22px; font-weight:700;">
+              ${fmtBrl(total)}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px;">
+            <p style="margin:0 0 16px; font-size:15px; color:#374151;">
+              Olá, <strong>${clientName}</strong>!
+            </p>
+            <p style="margin:0 0 16px; font-size:14px; color:#6b7280;">
+              Segue o link de pagamento referente ao pedido <strong>#${shortId}</strong>.
+              Você pode pagar via <strong>PIX, Cartão ou Boleto Bancário</strong>.
+            </p>
+            ${dueLine}
+            <p style="text-align:center; margin:24px 0 0;">
+              <a href="${checkoutUrl}"
+                 style="display:inline-block; background:#16a34a; color:#fff; text-decoration:none;
+                        font-size:15px; font-weight:700; padding:14px 36px; border-radius:8px;">
+                Pagar agora
+              </a>
+            </p>
+            <p style="margin:16px 0 0; font-size:12px; color:#9ca3af; text-align:center;">
+              Ou acesse: <a href="${checkoutUrl}" style="color:#1e40af;">${checkoutUrl}</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px 24px; border-top:1px solid #f3f4f6; text-align:center;">
+            <p style="margin:0; font-size:12px; color:#9ca3af;">
+              Este email foi enviado automaticamente por ${tenantName}.<br>
+              Em caso de dúvidas, entre em contato com a distribuidora.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendCobrancaEmail(
+  to: string | string[],
+  tenantName: string,
+  clientName: string,
+  orderId: string,
+  total: number,
+  checkoutUrl: string,
+  dueDate?: Date | null,
+  fromOverride?: string | null,
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean) as string[];
+  if (recipients.length === 0) return;
+  const shortId = orderId.slice(-8).toUpperCase();
+  try {
+    await getResend().emails.send({
+      from:    fromOverride?.trim() || FROM,
+      to:      recipients,
+      subject: `Cobrança #${shortId} — ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)} | ${tenantName}`,
+      html:    cobrancaHtml(tenantName, clientName, shortId, total, checkoutUrl, dueDate),
+    });
+    console.log("[EMAIL] cobrança enviada para", recipients);
+  } catch (err) {
+    console.error("[EMAIL] erro cobrança:", err);
+  }
+}
+
+// ─── Template pagamento confirmado ────────────────────────────────────────────
+
+function pagamentoConfirmadoHtml(tenantName: string, clientName: string, shortId: string, total: number): string {
+  const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0; padding:0; background:#f9fafb; font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="background:#fff; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; max-width:560px; width:100%;">
+        <tr>
+          <td style="background:#16a34a; padding:24px 32px; text-align:center;">
+            <p style="margin:0; font-size:18px; font-weight:700; color:#fff;">${tenantName}</p>
+            <p style="margin:4px 0 0; font-size:13px; color:#bbf7d0;">Pagamento confirmado ✅</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px;">
+            <p style="margin:0 0 16px; font-size:15px; color:#374151;">
+              Olá, <strong>${clientName}</strong>!
+            </p>
+            <p style="margin:0 0 8px; font-size:14px; color:#6b7280;">
+              Recebemos o pagamento do pedido <strong>#${shortId}</strong> no valor de
+              <strong style="color:#16a34a;">${fmtBrl(total)}</strong>. Obrigado! 🎉
+            </p>
+            <p style="margin:16px 0 0; font-size:14px; color:#6b7280;">
+              Em breve você receberá a Nota Fiscal por email.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px 24px; border-top:1px solid #f3f4f6; text-align:center;">
+            <p style="margin:0; font-size:12px; color:#9ca3af;">
+              Este email foi enviado automaticamente por ${tenantName}.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendPagamentoConfirmadoEmail(
+  to: string | string[],
+  tenantName: string,
+  clientName: string,
+  orderId: string,
+  total: number,
+  fromOverride?: string | null,
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean) as string[];
+  if (recipients.length === 0) return;
+  const shortId = orderId.slice(-8).toUpperCase();
+  try {
+    await getResend().emails.send({
+      from:    fromOverride?.trim() || FROM,
+      to:      recipients,
+      subject: `Pagamento confirmado — Pedido #${shortId} | ${tenantName}`,
+      html:    pagamentoConfirmadoHtml(tenantName, clientName, shortId, total),
+    });
+    console.log("[EMAIL] pagamento confirmado enviado para", recipients);
+  } catch (err) {
+    console.error("[EMAIL] erro pagamento confirmado:", err);
+  }
+}
+
 // ─── Template NF-e emitida ────────────────────────────────────────────────────
 
 function nfeEmitidaHtml(tenantName: string, clientName: string, shortId: string, danfeUrl?: string | null): string {

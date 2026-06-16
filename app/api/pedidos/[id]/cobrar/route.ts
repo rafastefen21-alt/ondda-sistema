@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MercadoPagoConfig, Preference } from "mercadopago";
+import { sendCobrancaEmail } from "@/lib/email";
 
 export async function POST(
   req: NextRequest,
@@ -22,7 +23,7 @@ export async function POST(
   const order = await prisma.order.findFirst({
     where: { id, tenantId },
     include: {
-      client: { select: { name: true, email: true } },
+      client: { select: { name: true, email: true, decisorEmail: true } },
       items: {
         include: { product: { select: { name: true } } },
       },
@@ -123,10 +124,31 @@ export async function POST(
       data: { mpPaymentId: preference.id?.toString() ?? null },
     });
 
-    return NextResponse.json({
-      paymentId: payment.id,
-      checkoutUrl: preference.sandbox_init_point ?? preference.init_point,
-    });
+    const checkoutUrl = preference.sandbox_init_point ?? preference.init_point ?? null;
+
+    // Envia email de cobrança com link de pagamento
+    if (checkoutUrl) {
+      const tenantWithEmail = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { emailRemetente: true },
+      });
+      const recipients = [
+        order.client.decisorEmail,
+        order.client.email,
+      ].filter(Boolean) as string[];
+      sendCobrancaEmail(
+        [...new Set(recipients)],
+        tenant.name,
+        order.client.name ?? order.client.email,
+        order.id,
+        total,
+        checkoutUrl,
+        payment.dueDate,
+        tenantWithEmail?.emailRemetente,
+      ).catch((e) => console.error("[cobrar] email erro:", e));
+    }
+
+    return NextResponse.json({ paymentId: payment.id, checkoutUrl });
   } catch (err: unknown) {
     const mpErr = err as { message?: string; cause?: { error?: string; message?: string } };
     const detail = mpErr?.cause?.message ?? mpErr?.cause?.error ?? mpErr?.message ?? "Erro desconhecido";

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MercadoPagoConfig, Payment as MpPayment } from "mercadopago";
+import { sendPagamentoConfirmadoEmail } from "@/lib/email";
+import { autoEmitirNfe } from "@/lib/nfe-service";
 
 // MP sends GET to verify the endpoint on setup
 export async function GET() {
@@ -104,6 +106,46 @@ export async function POST(req: NextRequest) {
           ...(newStatus === "PAGO" ? { paidAt: new Date() } : {}),
         },
       });
+
+      // Quando pagamento confirmado: email + NF-e automática
+      if (newStatus === "PAGO") {
+        const orderId = payment.orderId;
+        const tenantId = payment.order.tenantId;
+
+        // Busca dados do pedido/cliente/tenant para email e NF-e
+        const orderFull = await prisma.order.findFirst({
+          where: { id: orderId, tenantId },
+          include: {
+            client: { select: { name: true, email: true, decisorEmail: true, nomeFantasia: true } },
+            items: true,
+            tenant: { select: { name: true, emailRemetente: true } },
+          },
+        });
+
+        if (orderFull) {
+          const total = orderFull.items.reduce(
+            (s, i) => s + Number(i.unitPrice) * Number(i.quantity), 0,
+          );
+          const recipients = [
+            orderFull.client.decisorEmail,
+            orderFull.client.email,
+          ].filter(Boolean) as string[];
+
+          // Email de confirmação de pagamento
+          sendPagamentoConfirmadoEmail(
+            [...new Set(recipients)],
+            orderFull.tenant.name,
+            orderFull.client.nomeFantasia ?? orderFull.client.name ?? orderFull.client.email,
+            orderId,
+            total,
+            orderFull.tenant.emailRemetente,
+          ).catch((e) => console.error("[MP-webhook] email pagamento:", e));
+
+          // Emissão automática de NF-e (fire-and-forget)
+          autoEmitirNfe(orderId, tenantId)
+            .catch((e) => console.error("[MP-webhook] auto NF-e:", e));
+        }
+      }
     }
 
     return NextResponse.json({ status: "processed" });
