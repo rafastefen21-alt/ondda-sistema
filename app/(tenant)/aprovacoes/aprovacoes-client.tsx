@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, Clock,
-  Mail, Phone, User, CalendarDays, ShoppingBag, MapPin, FileText, Truck,
+  Mail, Phone, User, CalendarDays, ShoppingBag, MapPin, FileText, Truck, UserCheck, UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,6 +15,14 @@ interface OrderItem {
   quantity: number;
   unitPrice: number;
   product: { name: string; unit: string; price: number };
+}
+
+interface PendingClient {
+  id: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  createdAt: Date;
 }
 
 interface Client {
@@ -37,11 +45,48 @@ interface Order {
   items: OrderItem[];
 }
 
-export function AprovacoesClient({ orders: initialOrders }: { orders: Order[] }) {
+export function AprovacoesClient({
+  pendingClients: initialPendingClients,
+  orders: initialOrders,
+}: {
+  pendingClients: PendingClient[];
+  orders: Order[];
+}) {
   const router = useRouter();
+  const [pendingClients, setPendingClients] = useState(initialPendingClients);
+  const [clientLoading, setClientLoading] = useState<string | null>(null);
   const [orders, setOrders] = useState(initialOrders);
   const [expanded, setExpanded] = useState<string | null>(initialOrders[0]?.id ?? null);
   const [loading, setLoading] = useState<string | null>(null);
+
+  async function handleApproveClient(clientId: string) {
+    setClientLoading(clientId);
+    try {
+      const res = await fetch(`/api/clientes/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: true }),
+      });
+      if (!res.ok) throw new Error();
+      setPendingClients((prev) => prev.filter((c) => c.id !== clientId));
+      router.refresh();
+    } finally {
+      setClientLoading(null);
+    }
+  }
+
+  async function handleRejectClient(clientId: string) {
+    if (!confirm("Recusar este cadastro? O cliente não poderá acessar a loja.")) return;
+    setClientLoading(clientId);
+    try {
+      await fetch(`/api/clientes/${clientId}`, {
+        method: "DELETE",
+      });
+      setPendingClients((prev) => prev.filter((c) => c.id !== clientId));
+    } finally {
+      setClientLoading(null);
+    }
+  }
 
   // Per-order date picker state: orderId -> date string
   const [pendingApproval, setPendingApproval] = useState<Record<string, string>>({});
@@ -99,14 +144,71 @@ export function AprovacoesClient({ orders: initialOrders }: { orders: Order[] })
     }
   }
 
+  const pendingClientsSection = pendingClients.length > 0 && (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900">Cadastros pendentes</h2>
+        <p className="text-sm text-gray-500">{pendingClients.length} cliente(s) aguardando liberação de acesso à loja</p>
+      </div>
+      {pendingClients.map((c) => (
+        <Card key={c.id} className="overflow-hidden">
+          <div className="flex items-center justify-between gap-4 p-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <User className="h-4 w-4 text-amber-700" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-medium text-gray-900">{c.name ?? c.email}</p>
+                <div className="flex flex-wrap gap-3 mt-0.5">
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
+                    <Mail className="h-3 w-3" />{c.email}
+                  </span>
+                  {c.phone && (
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <Phone className="h-3 w-3" />{c.phone}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                    <CalendarDays className="h-3 w-3" />Cadastrou em {formatDate(c.createdAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-shrink-0 gap-2">
+              <button
+                onClick={() => handleRejectClient(c.id)}
+                disabled={clientLoading === c.id}
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                <UserX className="h-4 w-4" />
+                Recusar
+              </button>
+              <button
+                onClick={() => handleApproveClient(c.id)}
+                disabled={clientLoading === c.id}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                <UserCheck className="h-4 w-4" />
+                {clientLoading === c.id ? "Aprovando..." : "Aprovar"}
+              </button>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+
   if (orders.length === 0) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">Aprovações</h1>
-        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 py-20">
-          <CheckCircle className="mb-4 h-12 w-12 text-green-300" />
-          <p className="text-gray-500">Nenhum pedido aguardando aprovação.</p>
-        </div>
+        {pendingClientsSection}
+        {pendingClients.length === 0 && (
+          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 py-20">
+            <CheckCircle className="mb-4 h-12 w-12 text-green-300" />
+            <p className="text-gray-500">Nenhum pedido ou cadastro aguardando aprovação.</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -117,6 +219,8 @@ export function AprovacoesClient({ orders: initialOrders }: { orders: Order[] })
         <h1 className="text-2xl font-bold text-gray-900">Aprovações</h1>
         <p className="text-gray-500">{orders.length} pedido(s) aguardando sua aprovação</p>
       </div>
+
+      {pendingClientsSection}
 
       <div className="space-y-4">
         {orders.map((order) => {

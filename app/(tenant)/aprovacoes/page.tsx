@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { AprovacoesClient } from "./aprovacoes-client";
-import type { Prisma } from "@/app/generated/prisma/client";
 
 export default async function AprovacoesPage() {
   const session = await auth();
@@ -13,25 +12,39 @@ export default async function AprovacoesPage() {
     redirect("/dashboard");
   }
 
-  const orders = await prisma.order.findMany({
-    where: { tenantId, status: "PENDENTE_APROVACAO" },
-    include: {
-      client: {
-        select: {
-          id: true, name: true, nomeFantasia: true, email: true, phone: true,
-          createdAt: true, active: true,
-          _count: { select: { orders: true } },
+  const [pendingClients, orders] = await Promise.all([
+    prisma.user.findMany({
+      where: { tenantId, role: "CLIENTE", active: false },
+      select: { id: true, name: true, nomeFantasia: true, email: true, phone: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.order.findMany({
+      where: { tenantId, status: "PENDENTE_APROVACAO" },
+      include: {
+        client: {
+          select: {
+            id: true, name: true, nomeFantasia: true, email: true, phone: true,
+            createdAt: true, active: true,
+            _count: { select: { orders: true } },
+          },
+        },
+        items: {
+          include: { product: { select: { name: true, unit: true, price: true } } },
         },
       },
-      items: {
-        include: { product: { select: { name: true, unit: true, price: true } } },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
   return (
     <AprovacoesClient
+      pendingClients={pendingClients.map((c) => ({
+        id: c.id,
+        name: c.nomeFantasia ?? c.name,
+        email: c.email,
+        phone: c.phone ?? null,
+        createdAt: c.createdAt,
+      }))}
       orders={orders.map((o) => ({
         id: o.id,
         createdAt: o.createdAt,

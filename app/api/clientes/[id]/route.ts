@@ -76,3 +76,28 @@ export async function PATCH(
   const updated = await prisma.user.update({ where: { id }, data });
   return NextResponse.json(updated);
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const session = await auth();
+  if (!session?.user?.tenantId) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+  const { tenantId, role } = session.user;
+  if (!["TENANT_ADMIN", "GERENTE", "SUPER_ADMIN"].includes(role)) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  }
+
+  const existing = await prisma.user.findFirst({
+    where: { id, tenantId, role: "CLIENTE", active: false },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "Cliente não encontrado ou já ativo." }, { status: 404 });
+  }
+
+  await prisma.user.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
