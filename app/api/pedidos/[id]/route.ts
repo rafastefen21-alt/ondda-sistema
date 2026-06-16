@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { OrderStatus } from "@/app/generated/prisma/client";
 import { sendOrderStatusEmail } from "@/lib/email";
 import { deductStockForOrder, restoreStockForOrder, STATUSES_WITH_STOCK_DEDUCTED } from "@/lib/stock";
+import { autoGerarCobranca } from "@/lib/cobranca-service";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -203,6 +204,9 @@ export async function PATCH(
     } catch (err) {
       console.error("[STOCK] erro ao descontar estoque:", err);
     }
+    // Gera cobrança automaticamente (fire-and-forget)
+    autoGerarCobranca(id, session.user.tenantId)
+      .catch((err) => console.error("[COBRANCA-AUTO] falha:", err));
   }
   if (
     parsed.data.status === "CANCELADO" &&

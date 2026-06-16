@@ -57,6 +57,7 @@ export default async function LojaPage({
       id: true, name: true, slug: true,
       lojaCorPrimaria: true, lojaBannerUrl: true,
       lojaLogoUrl: true, lojaDescricao: true, lojaPedidoMinimo: true,
+      mpAccessToken: true,
     },
   });
 
@@ -84,6 +85,7 @@ export default async function LojaPage({
         logoUrl: tenant.lojaLogoUrl ?? null,
         descricao: tenant.lojaDescricao ?? null,
         pedidoMinimo: tenant.lojaPedidoMinimo ? Number(tenant.lojaPedidoMinimo) : 0,
+        hasMp: !!tenant.mpAccessToken,
       }}
       products={products.map((p) => ({
         id: p.id,

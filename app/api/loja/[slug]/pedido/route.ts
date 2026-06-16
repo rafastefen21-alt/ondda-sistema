@@ -29,11 +29,14 @@ const novoSchema = z.object({
   items: z.array(itemSchema).default([]),
 });
 
+const PAYMENT_METHODS = ["PIX", "BOLETO", "CARTAO_CREDITO", "DINHEIRO", "TRANSFERENCIA"] as const;
+
 const existenteSchema = z.object({
   type: z.literal("existente"),
   email: z.string().email(),
   password: z.string().min(1),
   notes: z.string().optional(),
+  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
   items: z.array(itemSchema).min(1),
 });
 
@@ -159,6 +162,7 @@ export async function POST(
       clientId,
       status: "PENDENTE_APROVACAO",
       notes: notesText,
+      paymentMethod: data.type === "existente" ? (data.paymentMethod ?? null) : null,
       items: {
         create: data.items.map((item) => {
           const p      = productMap.get(item.productId)!;

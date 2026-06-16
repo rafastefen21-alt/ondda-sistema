@@ -92,6 +92,7 @@ interface TenantInfo {
   logoUrl: string | null;
   descricao: string | null;
   pedidoMinimo: number;
+  hasMp: boolean;
 }
 
 // ─── Loja session (localStorage) ─────────────────────────────────────────────
@@ -189,6 +190,7 @@ export function LojaClient({
   const [error, setError] = useState("");
   const [orderInfo, setOrderInfo] = useState<{ id: string | null; email: string } | null>(null);
 
+  const [paymentMethod, setPaymentMethod] = useState<"PIX" | "BOLETO" | "CARTAO_CREDITO" | "DINHEIRO" | "TRANSFERENCIA">("PIX");
   const [form, setForm] = useState({
     name: "", email: "", password: "", phone: "", cnpj: "", notes: "",
     loginEmail: "", loginPassword: "",
@@ -300,7 +302,7 @@ export function LojaClient({
     const body = tab === "novo"
       ? { type: "novo", name: form.name, email: form.email, password: form.password,
           phone: form.phone, cnpj: form.cnpj, notes: form.notes, ...addrFields, items }
-      : { type: "existente", email: form.loginEmail, password: form.loginPassword, notes: form.notes, items };
+      : { type: "existente", email: form.loginEmail, password: form.loginPassword, notes: form.notes, paymentMethod, items };
 
     const res = await fetch(`/api/loja/${tenant.slug}/pedido`, {
       method: "POST",
@@ -701,6 +703,43 @@ export function LojaClient({
                     rows={2}
                   />
                 </div>
+
+                {/* Forma de pagamento — só para clientes ativos fazendo pedido */}
+                {tab === "existente" && cartItems.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Forma de pagamento</label>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {(
+                        [
+                          { value: "PIX",           label: "PIX",           icon: "⚡" },
+                          { value: "BOLETO",         label: "Boleto",        icon: "📄" },
+                          { value: "CARTAO_CREDITO", label: "Cartão",        icon: "💳" },
+                          { value: "DINHEIRO",       label: "Dinheiro",      icon: "💵" },
+                          { value: "TRANSFERENCIA",  label: "Transferência", icon: "🏦" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setPaymentMethod(opt.value)}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                            paymentMethod === opt.value
+                              ? "border-blue-600 bg-blue-50 text-blue-700"
+                              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          <span>{opt.icon}</span>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {(paymentMethod === "PIX" || paymentMethod === "BOLETO" || paymentMethod === "CARTAO_CREDITO") && tenant.hasMp && (
+                      <p className="text-xs text-gray-400">
+                        Após a aprovação do pedido você receberá o link de pagamento por email.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {belowMinimo && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
