@@ -121,6 +121,26 @@ export function FiscalForm({ initial }: Props) {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? "Erro ao salvar dados fiscais.");
     } else {
+      // Sincroniza o estado local com a resposta do servidor.
+      // Evita que um router.refresh() em outra parte da página cause remount
+      // e reinicialize os campos com valores antigos do servidor.
+      const saved = await res.json().catch(() => null);
+      if (saved) {
+        setCnpj(saved.cnpj ?? "");
+        setIe(saved.ie ?? "");
+        setIm(saved.im ?? "");
+        setCnae(saved.cnae ?? "");
+        setRegimeTributario(saved.regimeTributario ?? "");
+        setCep(saved.cep ?? "");
+        setLogradouro(saved.logradouro ?? "");
+        setNumero(saved.numero ?? "");
+        setComplemento(saved.complemento ?? "");
+        setBairro(saved.bairro ?? "");
+        setCity(saved.city ?? "");
+        setState(saved.state ?? "");
+        setCodigoCidade(saved.codigoCidade ?? "");
+        setPhone(saved.phone ?? "");
+      }
       setSuccess(true);
       router.refresh();
       setTimeout(() => setSuccess(false), 3000);
