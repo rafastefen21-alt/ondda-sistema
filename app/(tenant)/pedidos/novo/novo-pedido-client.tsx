@@ -102,7 +102,10 @@ export function NovoPedidoClient({
             const custom  = map.get(item.productId);
             const product = products.find((p) => p.id === item.productId);
             if (!product) return item;
-            const unitPrice = custom?.price ?? product.price;
+            const unitPrice =
+              custom?.priceCaixa  ?? product.priceCaixa  ??
+              custom?.pricePacote ?? product.pricePacote ??
+              custom?.price       ?? product.price;
             return { ...item, unitPrice };
           })
         );
@@ -133,8 +136,10 @@ export function NovoPedidoClient({
   function selectProduct(idx: number, productId: string) {
     const product = products.find((p) => p.id === productId);
     const custom  = customPrices.get(productId);
-    // Usa preço customizado do cliente se existir, senão o padrão do produto
-    const unitPrice = custom?.price ?? product?.price ?? 0;
+    const unitPrice =
+      custom?.priceCaixa   ?? product?.priceCaixa   ??
+      custom?.pricePacote  ?? product?.pricePacote  ??
+      custom?.price        ?? product?.price        ?? 0;
     setItems((prev) =>
       prev.map((item, i) =>
         i === idx ? { ...item, productId, unitPrice } : item
