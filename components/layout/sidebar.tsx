@@ -22,6 +22,7 @@ import {
   HelpCircle,
   Warehouse,
   MessageCircle,
+  UserSearch,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -111,6 +112,12 @@ const navItems: NavItem[] = [
     href: "/whatsapp",
     label: "WhatsApp",
     icon: MessageCircle,
+    roles: ["TENANT_ADMIN", "GERENTE"],
+  },
+  {
+    href: "/crm",
+    label: "CRM",
+    icon: UserSearch,
     roles: ["TENANT_ADMIN", "GERENTE"],
   },
   {

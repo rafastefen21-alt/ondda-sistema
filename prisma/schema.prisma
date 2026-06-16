@@ -131,6 +131,7 @@ model Tenant {
   stockItems     StockItem[]
   factoryOrders  FactoryOrder[]
   clientPrices   ClientProductPrice[]
+  crmCards       CrmCard[]
 
   @@index([slug])
 }
@@ -182,6 +183,7 @@ model User {
   orders         Order[]  @relation("OrderClient")
   approvedOrders Order[]  @relation("OrderApprover")
   clientPrices   ClientProductPrice[]
+  crmCards       CrmCard[]
 
   @@index([tenantId])
 }
@@ -474,4 +476,36 @@ model OperationalCost {
 
   @@index([tenantId])
   @@index([date])
+}
+
+// ============================================================
+// CRM
+// ============================================================
+
+// Tab 1 stages: PRIMEIRO_CONTATO | ENVIO_AMOSTRA | NEGOCIACAO | FECHADO
+// Tab 2 stages: PESQUISA_SATISFACAO | VERIFICACAO_ESTOQUE | RECOMPROU
+model CrmCard {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Lead info (pode não ter User cadastrado ainda)
+  clientId  String?
+  client    User?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  leadName  String?
+  leadPhone String?
+  leadEmail String?
+  leadSource String? // "indicação", "instagram", "loja", etc.
+
+  tab       String  @default("NOVOS")           // "NOVOS" | "POS_VENDA"
+  stage     String  @default("PRIMEIRO_CONTATO") // ver valores acima
+  position  Int     @default(0)
+
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, tab, stage])
+  @@index([clientId])
 }
