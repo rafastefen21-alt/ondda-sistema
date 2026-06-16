@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { MercadoPagoConfig, Payment as MpPayment } from "mercadopago";
 import { sendPagamentoConfirmadoEmail } from "@/lib/email";
 import { autoEmitirNfe } from "@/lib/nfe-service";
+import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
+import { zapiSendText } from "@/lib/zapi";
 
 // MP sends GET to verify the endpoint on setup
 export async function GET() {
@@ -116,9 +118,9 @@ export async function POST(req: NextRequest) {
         const orderFull = await prisma.order.findFirst({
           where: { id: orderId, tenantId },
           include: {
-            client: { select: { name: true, email: true, decisorEmail: true, nomeFantasia: true } },
+            client: { select: { name: true, email: true, decisorEmail: true, nomeFantasia: true, phone: true, decisorPhone: true } },
             items: true,
-            tenant: { select: { name: true, emailRemetente: true } },
+            tenant: { select: { name: true, emailRemetente: true, zapiInstanceId: true, zapiToken: true, notificacoes: true } },
           },
         });
 
@@ -126,20 +128,38 @@ export async function POST(req: NextRequest) {
           const total = orderFull.items.reduce(
             (s, i) => s + Number(i.unitPrice) * Number(i.quantity), 0,
           );
-          const recipients = [
-            orderFull.client.decisorEmail,
-            orderFull.client.email,
-          ].filter(Boolean) as string[];
+          const notif = mergeNotificacoes(orderFull.tenant.notificacoes);
+          const clientName = orderFull.client.nomeFantasia ?? orderFull.client.name ?? orderFull.client.email;
+          const shortId = orderId.slice(-8).toUpperCase();
+          const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-          // Email de confirmação de pagamento
-          sendPagamentoConfirmadoEmail(
-            [...new Set(recipients)],
-            orderFull.tenant.name,
-            orderFull.client.nomeFantasia ?? orderFull.client.name ?? orderFull.client.email,
-            orderId,
-            total,
-            orderFull.tenant.emailRemetente,
-          ).catch((e) => console.error("[MP-webhook] email pagamento:", e));
+          // E-mail confirmação de pagamento
+          if (notif.email.pagamentoConfirmado) {
+            const recipients = [
+              orderFull.client.decisorEmail,
+              orderFull.client.email,
+            ].filter(Boolean) as string[];
+            sendPagamentoConfirmadoEmail(
+              [...new Set(recipients)],
+              orderFull.tenant.name,
+              clientName,
+              orderId,
+              total,
+              orderFull.tenant.emailRemetente,
+            ).catch((e) => console.error("[MP-webhook] email pagamento:", e));
+          }
+
+          // WhatsApp confirmação de pagamento
+          const phone = orderFull.client.phone ?? orderFull.client.decisorPhone ?? null;
+          if (notif.whatsapp.pagamentoConfirmado && orderFull.tenant.zapiInstanceId && orderFull.tenant.zapiToken && phone) {
+            const msg = renderNotifMessage(notif.mensagens.pagamentoConfirmado, {
+              nome: clientName, pedido: shortId, valor: fmtBrl(total),
+            });
+            zapiSendText(
+              { instanceId: orderFull.tenant.zapiInstanceId, token: orderFull.tenant.zapiToken },
+              phone, msg,
+            ).catch((e) => console.error("[MP-webhook] WA pagamento:", e));
+          }
 
           // Emissão automática de NF-e (fire-and-forget)
           autoEmitirNfe(orderId, tenantId)

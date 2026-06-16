@@ -112,6 +112,9 @@ model Tenant {
   zapiInstanceId   String?
   zapiToken        String?
 
+  // Configurações de notificações automáticas (JSON — ver lib/notificacoes.ts)
+  notificacoes     Json?
+
   // Personalização da loja pública
   lojaCorPrimaria  String?  @default("#f59e0b")
   lojaBannerUrl    String?

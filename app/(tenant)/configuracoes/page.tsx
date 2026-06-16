@@ -9,6 +9,7 @@ import { LojaConfigForm } from "./loja-config-form";
 import { UsuariosManager } from "./usuarios-manager";
 import { IntegracoesForm } from "./integracoes-form";
 import { FiscalForm } from "./fiscal-form";
+import { NotificacoesForm } from "./notificacoes-form";
 
 export default async function ConfiguracoesPage() {
   const session = await auth();
@@ -192,6 +193,18 @@ export default async function ConfiguracoesPage() {
         }))}
         currentUserId={currentUserId}
       />
+      </div>
+
+      {/* Notifications */}
+      <div id="notificacoes" className="scroll-mt-6">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <Settings className="h-5 w-5 text-blue-700" />
+          Notificações Automáticas
+        </h2>
+        <NotificacoesForm
+          initial={tenant?.notificacoes ?? null}
+          zapiConfigured={!!(tenant?.zapiInstanceId && tenant?.zapiToken)}
+        />
       </div>
 
       {/* Loja customization */}

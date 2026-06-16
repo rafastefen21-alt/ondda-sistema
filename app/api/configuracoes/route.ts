@@ -34,6 +34,8 @@ const schema = z.object({
   // Z-API (WhatsApp)
   zapiInstanceId:   z.string().optional().nullable(),
   zapiToken:        z.string().optional().nullable(),
+  // Notificações automáticas
+  notificacoes:     z.record(z.unknown()).optional().nullable(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -85,6 +87,7 @@ export async function PATCH(req: NextRequest) {
       ...(d.emailRemetente   !== undefined ? { emailRemetente:   d.emailRemetente   || null } : {}),
       ...(d.zapiInstanceId   !== undefined ? { zapiInstanceId:   d.zapiInstanceId   || null } : {}),
       ...(d.zapiToken        !== undefined ? { zapiToken:        d.zapiToken        || null } : {}),
+      ...(d.notificacoes     !== undefined ? { notificacoes:     d.notificacoes     ?? null } : {}),
     },
   });
 

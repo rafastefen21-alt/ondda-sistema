@@ -7,6 +7,8 @@
 import { prisma } from "@/lib/prisma";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { sendCobrancaEmail } from "@/lib/email";
+import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
+import { zapiSendText } from "@/lib/zapi";
 
 export async function autoGerarCobranca(orderId: string, tenantId: string): Promise<void> {
   try {
@@ -14,7 +16,7 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       prisma.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
-          client: { select: { name: true, email: true, decisorEmail: true, nomeFantasia: true } },
+          client: { select: { name: true, email: true, decisorEmail: true, nomeFantasia: true, phone: true, decisorPhone: true } },
           items: { include: { product: { select: { name: true } } } },
           // Não gera segunda cobrança se já tiver payment pendente ou pago
           payments: { where: { status: { in: ["PENDENTE", "PAGO"] } } },
@@ -22,7 +24,7 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       }),
       prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { name: true, mpAccessToken: true, emailRemetente: true },
+        select: { name: true, mpAccessToken: true, emailRemetente: true, zapiInstanceId: true, zapiToken: true, notificacoes: true },
       }),
     ]);
 
@@ -85,18 +87,37 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
     });
 
     if (checkoutUrl) {
-      const recipients = [order.client.decisorEmail, order.client.email].filter(Boolean) as string[];
-      await sendCobrancaEmail(
-        [...new Set(recipients)],
-        tenant.name,
-        order.client.nomeFantasia ?? order.client.name ?? order.client.email,
-        orderId,
-        total,
-        checkoutUrl,
-        dueDate,
-        tenant.emailRemetente,
-      );
-      console.log("[COBRANCA-AUTO] cobrança gerada e email enviado para pedido", orderId);
+      const notif = mergeNotificacoes(tenant.notificacoes);
+      const clientName = order.client.nomeFantasia ?? order.client.name ?? order.client.email;
+      const shortId = orderId.slice(-8).toUpperCase();
+      const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+      // E-mail
+      if (notif.email.cobrancaGerada) {
+        const recipients = [order.client.decisorEmail, order.client.email].filter(Boolean) as string[];
+        await sendCobrancaEmail(
+          [...new Set(recipients)],
+          tenant.name,
+          clientName,
+          orderId,
+          total,
+          checkoutUrl,
+          dueDate,
+          tenant.emailRemetente,
+        );
+      }
+
+      // WhatsApp
+      const phone = order.client.phone ?? order.client.decisorPhone ?? null;
+      if (notif.whatsapp.cobrancaGerada && tenant.zapiInstanceId && tenant.zapiToken && phone) {
+        const msg = renderNotifMessage(notif.mensagens.cobrancaGerada, {
+          nome: clientName, pedido: shortId, valor: fmtBrl(total),
+        });
+        zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg)
+          .catch((e) => console.error("[COBRANCA-AUTO] WA error:", e));
+      }
+
+      console.log("[COBRANCA-AUTO] cobrança gerada para pedido", orderId);
     }
   } catch (err) {
     console.error("[COBRANCA-AUTO] erro inesperado:", err);

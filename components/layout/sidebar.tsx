@@ -126,10 +126,11 @@ const navItems: NavItem[] = [
     icon: Settings,
     roles: ["TENANT_ADMIN"],
     children: [
-      { href: "/configuracoes#dados-fiscais", label: "Dados Fiscais" },
-      { href: "/configuracoes#integracoes",   label: "Integrações" },
-      { href: "/configuracoes#usuarios",      label: "Usuários" },
-      { href: "/configuracoes#loja-online",   label: "Loja Online" },
+      { href: "/configuracoes#dados-fiscais",  label: "Dados Fiscais" },
+      { href: "/configuracoes#integracoes",    label: "Integrações" },
+      { href: "/configuracoes#usuarios",       label: "Usuários" },
+      { href: "/configuracoes#notificacoes",   label: "Notificações" },
+      { href: "/configuracoes#loja-online",    label: "Loja Online" },
     ],
   },
   {

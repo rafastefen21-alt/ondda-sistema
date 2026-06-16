@@ -6,6 +6,8 @@ import type { OrderStatus } from "@/app/generated/prisma/client";
 import { sendOrderStatusEmail } from "@/lib/email";
 import { deductStockForOrder, restoreStockForOrder, STATUSES_WITH_STOCK_DEDUCTED } from "@/lib/stock";
 import { autoGerarCobranca } from "@/lib/cobranca-service";
+import { mergeNotificacoes, renderNotifMessage, STATUS_TO_WA_KEY, STATUS_TO_MSG_KEY } from "@/lib/notificacoes";
+import { zapiSendText } from "@/lib/zapi";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -191,9 +193,10 @@ export async function PATCH(
         select: {
           name: true, email: true,
           decisorEmail: true, decisorNome: true,
+          phone: true, decisorPhone: true,
         },
       },
-      tenant: { select: { name: true, emailRemetente: true } },
+      tenant: { select: { name: true, emailRemetente: true, zapiInstanceId: true, zapiToken: true, notificacoes: true } },
     },
   });
 
@@ -219,32 +222,50 @@ export async function PATCH(
     }
   }
 
-  // ── Envia e-mail de notificação se houve mudança de status ────────────────
+  // ── Envia notificações se houve mudança de status ────────────────────────
   if (parsed.data.status) {
     const { client, tenant } = updated;
+    const notif = mergeNotificacoes(tenant.notificacoes);
+    const clientName = client.decisorNome ?? client.name ?? client.email;
+    const shortId = updated.id.slice(-8).toUpperCase();
 
-    // Destinatários: decisorEmail (principal) + email do cliente (fallback/cópia)
-    const recipients = [client.decisorEmail, client.email].filter(Boolean) as string[];
-    // Remove duplicatas caso sejam iguais
-    const uniqueRecipients = [...new Set(recipients)];
+    // E-mail
+    if (notif.email.statusAtualizado) {
+      const recipients = [client.decisorEmail, client.email].filter(Boolean) as string[];
+      const uniqueRecipients = [...new Set(recipients)];
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+      sendOrderStatusEmail(uniqueRecipients, {
+        orderId:   updated.id,
+        status:    parsed.data.status,
+        tenantName: tenant.name,
+        clientName,
+        items: updated.items.map((i) => ({
+          productName: i.product.name,
+          quantity:    Number(i.quantity),
+          unit:        i.product.unit,
+          unitPrice:   Number(i.unitPrice),
+        })),
+        scheduledDeliveryDate: updated.scheduledDeliveryDate,
+        appUrl,
+      }, tenant.emailRemetente).catch((err) => console.error("[EMAIL] falha silenciosa:", err));
+    }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-
-    // Fire-and-forget — não bloqueia a resposta
-    sendOrderStatusEmail(uniqueRecipients, {
-      orderId:   updated.id,
-      status:    parsed.data.status,
-      tenantName: tenant.name,
-      clientName: client.decisorNome ?? client.name ?? client.email,
-      items: updated.items.map((i) => ({
-        productName: i.product.name,
-        quantity:    Number(i.quantity),
-        unit:        i.product.unit,
-        unitPrice:   Number(i.unitPrice),
-      })),
-      scheduledDeliveryDate: updated.scheduledDeliveryDate,
-      appUrl,
-    }, tenant.emailRemetente).catch((err) => console.error("[EMAIL] falha silenciosa:", err));
+    // WhatsApp
+    const waKey  = STATUS_TO_WA_KEY[parsed.data.status];
+    const msgKey = STATUS_TO_MSG_KEY[parsed.data.status];
+    const phone  = client.phone ?? client.decisorPhone ?? null;
+    if (
+      waKey && msgKey &&
+      notif.whatsapp[waKey] &&
+      tenant.zapiInstanceId && tenant.zapiToken && phone
+    ) {
+      const msg = renderNotifMessage(notif.mensagens[msgKey], { nome: clientName, pedido: shortId });
+      zapiSendText(
+        { instanceId: tenant.zapiInstanceId, token: tenant.zapiToken },
+        phone,
+        msg,
+      ).catch((e) => console.error("[WA] falha silenciosa:", e));
+    }
   }
 
   return NextResponse.json(updated);

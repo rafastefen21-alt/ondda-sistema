@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma";
 import { validateNfeReady, buildNfePayload, submitNfe } from "@/lib/nfe";
 import { sendNfeEmail } from "@/lib/email";
+import { mergeNotificacoes } from "@/lib/notificacoes";
 
 export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<void> {
   try {
@@ -37,7 +38,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
           name: true, cnpj: true, ie: true, cnae: true, regimeTributario: true,
           cep: true, logradouro: true, numero: true, complemento: true,
           bairro: true, city: true, state: true, codigoCidade: true, phone: true,
-          focusNfeToken: true, nfeAmbiente: true, emailRemetente: true,
+          focusNfeToken: true, nfeAmbiente: true, emailRemetente: true, notificacoes: true,
         },
       }),
     ]);
@@ -133,15 +134,18 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
     });
 
     if (updated.status === "EMITIDA") {
-      const recipients = [order.client.decisorEmail, order.client.email].filter(Boolean) as string[];
-      await sendNfeEmail(
-        [...new Set(recipients)],
-        tenant.name,
-        order.client.name ?? order.client.email,
-        order.id,
-        updated.pdfUrl,
-        tenant.emailRemetente,
-      ).catch((e) => console.error("[NFE-AUTO] erro email NF-e:", e));
+      const notif = mergeNotificacoes(tenant.notificacoes);
+      if (notif.email.nfeEmitida) {
+        const recipients = [order.client.decisorEmail, order.client.email].filter(Boolean) as string[];
+        await sendNfeEmail(
+          [...new Set(recipients)],
+          tenant.name,
+          order.client.name ?? order.client.email,
+          order.id,
+          updated.pdfUrl,
+          tenant.emailRemetente,
+        ).catch((e) => console.error("[NFE-AUTO] erro email NF-e:", e));
+      }
       console.log("[NFE-AUTO] NF-e emitida e email enviado para pedido", orderId);
     }
   } catch (err) {
