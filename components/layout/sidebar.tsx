@@ -190,7 +190,7 @@ export function Sidebar({ role, tenantName, logoUrl }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-4">
+      <nav className="flex-1 overflow-y-auto p-4 sidebar-nav">
         <ul className="space-y-1">
           {visibleItems.map((item) => {
             const Icon = item.icon;
