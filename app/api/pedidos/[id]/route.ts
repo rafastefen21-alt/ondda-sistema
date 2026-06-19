@@ -20,9 +20,21 @@ const updateStatusSchema = z.object({
     "ENTREGUE",
     "CANCELADO",
   ]).optional(),
-  internalNotes: z.string().optional(),
+  internalNotes: z.string().optional().nullable(),
   cancelReason: z.string().optional(),
   scheduledDeliveryDate: z.string().optional().nullable(),
+  // Edição completa (permitida apenas em RASCUNHO / PENDENTE_APROVACAO)
+  clientId:        z.string().optional(),
+  paymentMethod:   z.string().optional().nullable(),
+  requestedDate:   z.string().optional().nullable(),
+  deliveryAddress: z.string().optional().nullable(),
+  notes:           z.string().optional().nullable(),
+  items: z.array(z.object({
+    productId: z.string(),
+    quantity:  z.number().positive(),
+    unitPrice: z.number().positive(),
+    notes:     z.string().optional(),
+  })).optional(),
 });
 
 // Status transition rules — allows skipping stages forward (for kanban drag)
@@ -136,6 +148,52 @@ export async function PATCH(
 
   const currentStatus = order.status as OrderStatus;
   const updateData: Record<string, unknown> = {};
+
+  // ── Edição completa do pedido (quando `items` está presente) ────────────────
+  if (parsed.data.items !== undefined) {
+    const canEdit = ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(session.user.role);
+    if (!canEdit) {
+      return NextResponse.json({ error: "Sem permissão para editar pedido" }, { status: 403 });
+    }
+    if (!["RASCUNHO", "PENDENTE_APROVACAO"].includes(currentStatus)) {
+      return NextResponse.json(
+        { error: "Pedido só pode ser editado em Rascunho ou Aguardando aprovação" },
+        { status: 400 },
+      );
+    }
+    if (parsed.data.items.length === 0) {
+      return NextResponse.json({ error: "O pedido deve ter ao menos 1 item" }, { status: 400 });
+    }
+
+    const d = parsed.data;
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      await tx.orderItem.deleteMany({ where: { orderId: id } });
+      await tx.orderItem.createMany({
+        data: d.items!.map((item) => ({
+          orderId:   id,
+          tenantId:  session.user.tenantId,
+          productId: item.productId,
+          quantity:  item.quantity,
+          unitPrice: item.unitPrice,
+          notes:     item.notes ?? null,
+        })),
+      });
+      return tx.order.update({
+        where: { id },
+        data: {
+          ...(d.clientId        !== undefined ? { clientId:              d.clientId }                                                      : {}),
+          ...(d.status          !== undefined ? { status:                d.status }                                                        : {}),
+          ...(d.paymentMethod   !== undefined ? { paymentMethod:         d.paymentMethod   || null }                                       : {}),
+          ...(d.requestedDate   !== undefined ? { requestedDate:         d.requestedDate   ? new Date(d.requestedDate)   : null }          : {}),
+          ...(d.scheduledDeliveryDate !== undefined ? { scheduledDeliveryDate: d.scheduledDeliveryDate ? new Date(d.scheduledDeliveryDate) : null } : {}),
+          ...(d.deliveryAddress !== undefined ? { deliveryAddress:       d.deliveryAddress || null }                                       : {}),
+          ...(d.notes           !== undefined ? { notes:                 d.notes           ?? null }                                       : {}),
+          ...(d.internalNotes   !== undefined ? { internalNotes:         d.internalNotes   ?? null }                                       : {}),
+        },
+      });
+    });
+    return NextResponse.json(updatedOrder);
+  }
 
   // If only updating scheduledDeliveryDate (no status change)
   if (!parsed.data.status) {

@@ -481,6 +481,9 @@ export function OrderDetailClient({
   const canCancel =
     !["ENTREGUE", "CANCELADO"].includes(order.status) &&
     ["TENANT_ADMIN", "GERENTE"].includes(role);
+  const canEdit =
+    ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(role) &&
+    ["RASCUNHO", "PENDENTE_APROVACAO"].includes(order.status);
 
   async function updateStatus(
     newStatus: OrderStatus,
@@ -563,7 +566,15 @@ export function OrderDetailClient({
             {order.client.name}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canEdit && (
+            <Link href={`/pedidos/${order.id}/editar`}>
+              <Button variant="outline" size="sm">
+                <Pencil className="h-4 w-4" />
+                Editar pedido
+              </Button>
+            </Link>
+          )}
           {canAdvance && nextAction && (
             <Button
               variant={nextAction.variant}
