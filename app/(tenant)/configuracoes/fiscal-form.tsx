@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,8 +35,6 @@ interface Props {
 }
 
 export function FiscalForm({ initial }: Props) {
-  const router = useRouter();
-
   const [cnpj,             setCnpj]             = useState(initial.cnpj             ?? "");
   const [ie,               setIe]               = useState(initial.ie               ?? "");
   const [im,               setIm]               = useState(initial.im               ?? "");
@@ -142,7 +139,6 @@ export function FiscalForm({ initial }: Props) {
         setPhone(saved.phone ?? "");
       }
       setSuccess(true);
-      router.refresh();
       setTimeout(() => setSuccess(false), 3000);
     }
   }
