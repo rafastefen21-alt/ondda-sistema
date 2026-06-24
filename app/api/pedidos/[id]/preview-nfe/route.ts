@@ -37,7 +37,13 @@ export async function GET(
       },
       items: {
         include: {
-          product: { select: { id: true, name: true, unit: true, ncm: true, cfop: true } },
+          product: {
+            select: {
+              id: true, name: true, unit: true, ncm: true, cfop: true,
+              icmsCsosn: true, stBcRetidoUnit: true, stAliquotaFinal: true,
+              stValorSubstitutoUnit: true, stIcmsRetidoUnit: true,
+            },
+          },
         },
       },
       payments: { select: { method: true, amount: true } },
@@ -62,7 +68,18 @@ export async function GET(
     id:       order.id,
     client:   order.client,
     items:    order.items.map((i) => ({
-      product:   i.product,
+      product: {
+        id:   i.product.id,
+        name: i.product.name,
+        unit: i.product.unit,
+        ncm:  i.product.ncm,
+        cfop: i.product.cfop,
+        icmsCsosn:             i.product.icmsCsosn,
+        stBcRetidoUnit:        i.product.stBcRetidoUnit        != null ? Number(i.product.stBcRetidoUnit)        : null,
+        stAliquotaFinal:       i.product.stAliquotaFinal       != null ? Number(i.product.stAliquotaFinal)       : null,
+        stValorSubstitutoUnit: i.product.stValorSubstitutoUnit != null ? Number(i.product.stValorSubstitutoUnit) : null,
+        stIcmsRetidoUnit:      i.product.stIcmsRetidoUnit      != null ? Number(i.product.stIcmsRetidoUnit)      : null,
+      },
       quantity:  Number(i.quantity),
       unitPrice: Number(i.unitPrice),
     })),

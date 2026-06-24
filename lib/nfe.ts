@@ -69,6 +69,13 @@ export interface NfeItem {
     unit: string;
     ncm:  string | null;
     cfop: string | null;
+    // Tributação ICMS — "102" sem ST (padrão) | "500" ICMS já recolhido por ST
+    icmsCsosn?:             string | null;
+    // Valores do ST retido anteriormente — informados por UNIDADE (CSOSN 500 / CST 60)
+    stBcRetidoUnit?:        number | string | null; // vBCSTRet por unidade
+    stAliquotaFinal?:       number | string | null; // pST (%)
+    stValorSubstitutoUnit?: number | string | null; // vICMSSubstituto por unidade
+    stIcmsRetidoUnit?:      number | string | null; // vICMSSTRet por unidade
   };
   quantity:  number | string;
   unitPrice: number | string;
@@ -135,6 +142,20 @@ export function validateNfeReady(order: NfeOrder, tenant: NfeTenant): NfeValidat
     if (!item.product.ncm) {
       missing.push(`NCM do produto "${item.product.name}" (Produtos → Editar)`);
     }
+    // Produto com ICMS já retido por ST (CSOSN 500 / CST 60) precisa dos valores
+    // do ST retido, senão a SEFAZ rejeita (erro 938).
+    const csosn = (item.product.icmsCsosn ?? "102").trim();
+    if (csosn === "500" || csosn === "60") {
+      const bc = Number(item.product.stBcRetidoUnit  ?? 0);
+      const st = Number(item.product.stIcmsRetidoUnit ?? 0);
+      const al = Number(item.product.stAliquotaFinal  ?? 0);
+      if (!(bc > 0) || !(st > 0) || !(al > 0)) {
+        missing.push(
+          `Valores de ICMS-ST retido do produto "${item.product.name}" `
+          + `(Base, Alíquota e ICMS-ST retido por unidade — Produtos → Editar → Tributação ICMS)`,
+        );
+      }
+    }
   }
 
   return { valid: missing.length === 0, missing };
@@ -195,19 +216,40 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
 
     // Focus NF-e usa `icms_situacao_tributaria` para TODOS os regimes:
     //  - Simples Nacional → valor é o CSOSN (ex: "102", "400", "500")
-    //  - Regime Normal    → valor é o CST   (ex: "41" = isento)
+    //  - Regime Normal    → valor é o CST   (ex: "41" = isento, "60" = ICMS ST retido)
     // O campo `icms_csosn` NÃO existe na API; Focus identifica o regime pelo CRT.
+    //
+    // A classificação ST agora vem do cadastro do produto (icmsCsosn), NÃO do
+    // sufixo do CFOP. "500"/"60" = ICMS já recolhido por substituição tributária.
+    const csosn = (item.product.icmsCsosn ?? "102").trim() || "102";
+    const temST = csosn === "500" || csosn === "60";
+
     if (isSimples) {
-      // CSOSN 102 — Simples Nacional sem permissão de crédito (sem ST)
-      // Gera <ICMSSN102><orig>0</orig><CSOSN>102</CSOSN></ICMSSN102>
-      entry.icms_situacao_tributaria = "102";
+      entry.icms_situacao_tributaria = temST ? "500" : csosn;
     } else {
-      // CST 41 — Regime Normal, operação isenta
-      // Gera <ICMS40><orig>0</orig><CST>41</CST></ICMS40>
-      entry.icms_situacao_tributaria = "41";
-      entry.icms_base_calculo        = 0;
-      entry.icms_aliquota            = 0;
-      entry.icms_valor               = 0;
+      // Regime Normal: CST 60 quando ST já retida, CST 41 (isento) caso contrário
+      entry.icms_situacao_tributaria = temST ? "60" : "41";
+      if (!temST) {
+        // Gera <ICMS40><orig>0</orig><CST>41</CST></ICMS40>
+        entry.icms_base_calculo = 0;
+        entry.icms_aliquota     = 0;
+        entry.icms_valor        = 0;
+      }
+    }
+
+    // ICMS já retido por ST (CSOSN 500 / CST 60) — exige os 4 valores do ST
+    // retido anteriormente. Valores cadastrados POR UNIDADE → multiplica pela
+    // quantidade vendida e arredonda em 2 casas (SEFAZ rejeição 938).
+    if (temST) {
+      const bcUnit  = Number(item.product.stBcRetidoUnit        ?? 0);
+      const subUnit = Number(item.product.stValorSubstitutoUnit ?? 0);
+      const stUnit  = Number(item.product.stIcmsRetidoUnit      ?? 0);
+      const pST     = Number(item.product.stAliquotaFinal       ?? 0);
+
+      entry.icms_base_calculo_retido_st = parseFloat((bcUnit * qty).toFixed(2));  // vBCSTRet
+      entry.icms_aliquota_final         = parseFloat(pST.toFixed(2));             // pST
+      entry.icms_valor_substituto       = parseFloat((subUnit * qty).toFixed(2)); // vICMSSubstituto
+      entry.icms_valor_retido_st        = parseFloat((stUnit * qty).toFixed(2));  // vICMSSTRet
     }
 
     return entry;
@@ -303,7 +345,7 @@ function focusAuth(token: string) {
   return "Basic " + Buffer.from(`${token}:`).toString("base64");
 }
 
-function focusBase(ambiente: string) {
+export function focusBase(ambiente: string) {
   return FOCUS_URL[ambiente] ?? FOCUS_URL.homologacao;
 }
 
@@ -356,6 +398,52 @@ export async function cancelNfe(
 export function danfeUrl(ref: string, token: string, ambiente: string) {
   return `${focusBase(ambiente)}/nfe/${encodeURIComponent(ref)}/danfe`
     + `?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Consulta a última CC-e de uma NF-e.
+ * A Focus NF-e não tem GET /carta_correcao — os eventos ficam dentro do GET /nfe/{ref}
+ * no array `cartas_correcao`.
+ */
+export async function fetchCartaCorrecao(
+  ref:      string,
+  token:    string,
+  ambiente: string,
+) {
+  const url = `${focusBase(ambiente)}/nfe/${encodeURIComponent(ref)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: focusAuth(token) },
+  });
+  const nfeData = await res.json().catch(() => ({}));
+
+  // Pega a CC-e de maior sequência
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cartas: any[] = nfeData.cartas_correcao ?? [];
+  const ultima = cartas.sort((a, b) => (b.sequencia ?? 0) - (a.sequencia ?? 0))[0] ?? null;
+
+  return { httpStatus: res.status, data: ultima ?? nfeData };
+}
+
+/**
+ * Envia Carta de Correção Eletrônica (CC-e) para uma NF-e já autorizada.
+ * @param ref       - referência Focus NF-e (focusNfeRef)
+ * @param texto     - texto da correção (15–1000 chars, sem acentos)
+ * @param sequencia - número da CC-e (1, 2, 3…). Use 1 para a primeira.
+ */
+export async function sendCartaCorrecao(
+  ref:       string,
+  texto:     string,
+  sequencia: number,
+  token:     string,
+  ambiente:  string,
+) {
+  const url = `${focusBase(ambiente)}/nfe/${encodeURIComponent(ref)}/carta_correcao`;
+  const res = await fetch(url, {
+    method:  "POST",
+    headers: { Authorization: focusAuth(token), "Content-Type": "application/json" },
+    body:    JSON.stringify({ correcao: texto, sequencia }),
+  });
+  return { httpStatus: res.status, data: await res.json().catch(() => ({})) };
 }
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────

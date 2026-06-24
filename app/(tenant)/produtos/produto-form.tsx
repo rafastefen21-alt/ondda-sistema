@@ -26,10 +26,16 @@ type ProductData = {
   priceCaixa?: number | null;
   labelPacote?: string | null;
   labelCaixa?: string | null;
+  qtdCaixa?: number | null;
   weightGrams?: number | null;
   diameterCm?: number | null;
   ncm?: string | null;
   cfop?: string | null;
+  icmsCsosn?: string | null;
+  stBcRetidoUnit?: number | string | null;
+  stAliquotaFinal?: number | string | null;
+  stValorSubstitutoUnit?: number | string | null;
+  stIcmsRetidoUnit?: number | string | null;
   imageUrl?: string | null;
   categoryId?: string | null;
   active?: boolean;
@@ -49,7 +55,10 @@ export function ProdutoForm({
   const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? "");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [icmsCsosn, setIcmsCsosn] = useState(product?.icmsCsosn ?? "102");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isST = icmsCsosn === "500";
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -100,6 +109,9 @@ export function ProdutoForm({
         ? parseFloat(fd.get("priceCaixa") as string)
         : null,
       labelCaixa: (fd.get("labelCaixa") as string) || null,
+      qtdCaixa: fd.get("qtdCaixa")
+        ? parseInt(fd.get("qtdCaixa") as string, 10)
+        : null,
       weightGrams: fd.get("weightGrams")
         ? parseInt(fd.get("weightGrams") as string, 10)
         : null,
@@ -108,6 +120,19 @@ export function ProdutoForm({
         : null,
       ncm:  (fd.get("ncm")  as string) || undefined,
       cfop: (fd.get("cfop") as string) || undefined,
+      icmsCsosn: (fd.get("icmsCsosn") as string) || "102",
+      stBcRetidoUnit: isST && fd.get("stBcRetidoUnit")
+        ? parseFloat(fd.get("stBcRetidoUnit") as string)
+        : null,
+      stAliquotaFinal: isST && fd.get("stAliquotaFinal")
+        ? parseFloat(fd.get("stAliquotaFinal") as string)
+        : null,
+      stValorSubstitutoUnit: isST && fd.get("stValorSubstitutoUnit")
+        ? parseFloat(fd.get("stValorSubstitutoUnit") as string)
+        : null,
+      stIcmsRetidoUnit: isST && fd.get("stIcmsRetidoUnit")
+        ? parseFloat(fd.get("stIcmsRetidoUnit") as string)
+        : null,
       imageUrl: imageUrl || undefined,
       active: fd.get("active") === "true",
     };
@@ -283,6 +308,21 @@ export function ProdutoForm({
                   />
                 </div>
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="qtdCaixa">Unidades por caixa</Label>
+                <Input
+                  id="qtdCaixa"
+                  name="qtdCaixa"
+                  type="number"
+                  step="1"
+                  min="1"
+                  defaultValue={product?.qtdCaixa ?? ""}
+                  placeholder="Ex: 24"
+                />
+                <p className="text-xs text-gray-400">
+                  Usado no estoque para mostrar o equivalente em unidades. Deixe em branco se não aplicável.
+                </p>
+              </div>
             </div>
 
             {/* Dimensões físicas */}
@@ -354,6 +394,91 @@ export function ProdutoForm({
                   5102 = int. · 6102 = interestad.
                 </p>
               </div>
+            </div>
+
+            {/* Tributação ICMS (NF-e) */}
+            <div className="space-y-3 rounded-md border border-gray-200 p-3">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Tributação ICMS (NF-e)
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="icmsCsosn">Situação do ICMS</Label>
+                <select
+                  id="icmsCsosn"
+                  name="icmsCsosn"
+                  value={icmsCsosn}
+                  onChange={(e) => setIcmsCsosn(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="102">102 — Sem substituição tributária (padrão)</option>
+                  <option value="500">500 — ICMS já recolhido por ST</option>
+                </select>
+                <p className="text-xs text-gray-400">
+                  Use &ldquo;500&rdquo; apenas se o ICMS deste produto já foi
+                  retido por substituição tributária na compra. Em caso de dúvida,
+                  confirme com seu contador.
+                </p>
+              </div>
+
+              {isST && (
+                <div className="space-y-3 rounded-md bg-amber-50 p-3">
+                  <p className="text-xs text-amber-800">
+                    Informe os valores do ST retido <strong>por unidade</strong>{" "}
+                    (estão na nota de compra). O sistema multiplica pela quantidade
+                    vendida ao emitir a NF-e.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="stBcRetidoUnit">Base ST retida / un. (R$)</Label>
+                      <Input
+                        id="stBcRetidoUnit"
+                        name="stBcRetidoUnit"
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        defaultValue={product?.stBcRetidoUnit ? Number(product.stBcRetidoUnit) : ""}
+                        placeholder="vBCSTRet"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="stAliquotaFinal">Alíquota final ST (%)</Label>
+                      <Input
+                        id="stAliquotaFinal"
+                        name="stAliquotaFinal"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={product?.stAliquotaFinal ? Number(product.stAliquotaFinal) : ""}
+                        placeholder="pST"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="stIcmsRetidoUnit">ICMS-ST retido / un. (R$)</Label>
+                      <Input
+                        id="stIcmsRetidoUnit"
+                        name="stIcmsRetidoUnit"
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        defaultValue={product?.stIcmsRetidoUnit ? Number(product.stIcmsRetidoUnit) : ""}
+                        placeholder="vICMSSTRet"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="stValorSubstitutoUnit">ICMS substituto / un. (R$)</Label>
+                      <Input
+                        id="stValorSubstitutoUnit"
+                        name="stValorSubstitutoUnit"
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        defaultValue={product?.stValorSubstitutoUnit ? Number(product.stValorSubstitutoUnit) : ""}
+                        placeholder="vICMSSubstituto (0 se não houver)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">

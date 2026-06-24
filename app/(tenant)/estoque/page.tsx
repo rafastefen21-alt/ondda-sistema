@@ -25,6 +25,9 @@ export default async function EstoquePage() {
     unit:          p.unit,
     ncm:           p.ncm ?? null,
     categoryName:  p.category?.name ?? null,
+    priceCaixa:    p.priceCaixa  != null ? Number(p.priceCaixa)  : null,
+    labelCaixa:    p.labelCaixa  ?? null,
+    qtdCaixa:      p.qtdCaixa    ?? null,
     quantity:      p.stockItem ? Number(p.stockItem.quantity) : 0,
     alertThreshold: p.stockItem?.alertThreshold ? Number(p.stockItem.alertThreshold) : null,
     recentMovements: (p.stockItem?.movements ?? []).map((m) => ({

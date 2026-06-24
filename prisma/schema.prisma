@@ -257,12 +257,19 @@ model Product {
   priceCaixa     Decimal?         @db.Decimal(10, 2)
   labelPacote    String?          // ex: "Pacote c/ 10 un"
   labelCaixa     String?          // ex: "Caixa c/ 24 un"
+  qtdCaixa       Int?             // Unidades por caixa — usado para conversão no estoque
   // Dimensões físicas
   weightGrams    Int?             // Peso unitário em gramas
   diameterCm     Decimal?         @db.Decimal(5, 1) // Diâmetro em cm
   // NF-e
   ncm            String?          // Código NCM para NF-e (8 dígitos)
   cfop           String?          @default("5102") // CFOP padrão — 5102 interno, 6102 interestadual
+  // NF-e — Tributação ICMS / Substituição Tributária
+  icmsCsosn             String?  @default("102") // CSOSN: "102" = sem ST (padrão) | "500" = ICMS já recolhido por ST
+  stBcRetidoUnit        Decimal? @db.Decimal(12, 4) // vBCSTRet por unidade (base de cálculo do ICMS-ST retido)
+  stAliquotaFinal       Decimal? @db.Decimal(5, 2)  // pST — alíquota suportada pelo consumidor final (%)
+  stValorSubstitutoUnit Decimal? @db.Decimal(12, 4) // vICMSSubstituto por unidade
+  stIcmsRetidoUnit      Decimal? @db.Decimal(12, 4) // vICMSSTRet por unidade (ICMS-ST retido)
   active         Boolean          @default(true)
   imageUrl       String?
   createdAt   DateTime         @default(now())

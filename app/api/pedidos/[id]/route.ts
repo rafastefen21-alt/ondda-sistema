@@ -178,19 +178,19 @@ export async function PATCH(
           notes:     item.notes ?? null,
         })),
       });
-      return tx.order.update({
-        where: { id },
-        data: {
-          ...(d.clientId        !== undefined ? { clientId:              d.clientId }                                                      : {}),
-          ...(d.status          !== undefined ? { status:                d.status }                                                        : {}),
-          ...(d.paymentMethod   !== undefined ? { paymentMethod:         d.paymentMethod   || null }                                       : {}),
-          ...(d.requestedDate   !== undefined ? { requestedDate:         d.requestedDate   ? new Date(d.requestedDate)   : null }          : {}),
-          ...(d.scheduledDeliveryDate !== undefined ? { scheduledDeliveryDate: d.scheduledDeliveryDate ? new Date(d.scheduledDeliveryDate) : null } : {}),
-          ...(d.deliveryAddress !== undefined ? { deliveryAddress:       d.deliveryAddress || null }                                       : {}),
-          ...(d.notes           !== undefined ? { notes:                 d.notes           ?? null }                                       : {}),
-          ...(d.internalNotes   !== undefined ? { internalNotes:         d.internalNotes   ?? null }                                       : {}),
-        },
-      });
+      // Cast necessário: Zod usa string para enums/datas, Prisma espera seus tipos nativos
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orderData: any = {
+        ...(d.clientId              !== undefined ? { clientId:              d.clientId }                                                        : {}),
+        ...(d.status                !== undefined ? { status:                d.status }                                                          : {}),
+        ...(d.paymentMethod         !== undefined ? { paymentMethod:         d.paymentMethod   || null }                                         : {}),
+        ...(d.requestedDate         !== undefined ? { requestedDate:         d.requestedDate   ? new Date(d.requestedDate)   : null }            : {}),
+        ...(d.scheduledDeliveryDate !== undefined ? { scheduledDeliveryDate: d.scheduledDeliveryDate ? new Date(d.scheduledDeliveryDate) : null } : {}),
+        ...(d.deliveryAddress       !== undefined ? { deliveryAddress:       d.deliveryAddress || null }                                         : {}),
+        ...(d.notes                 !== undefined ? { notes:                 d.notes           ?? null }                                         : {}),
+        ...(d.internalNotes         !== undefined ? { internalNotes:         d.internalNotes   ?? null }                                         : {}),
+      };
+      return tx.order.update({ where: { id }, data: orderData });
     });
     return NextResponse.json(updatedOrder);
   }

@@ -35,6 +35,9 @@ interface StockItem {
   unit: string;
   ncm: string | null;
   categoryName: string | null;
+  priceCaixa: number | null;
+  labelCaixa: string | null;
+  qtdCaixa: number | null;
   quantity: number;
   alertThreshold: number | null;
   recentMovements: Movement[];
@@ -56,6 +59,11 @@ const MOVE_COLOR = {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function unitLabel(item: StockItem): string {
+  if (item.priceCaixa !== null) return item.labelCaixa ?? "cx";
+  return item.unit;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -110,6 +118,7 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
       .then((data) => {
         setItems(data.map((p: {
           id: string; name: string; unit: string; ncm: string | null;
+          priceCaixa: number | null; labelCaixa: string | null; qtdCaixa: number | null;
           category: { name: string } | null;
           stockItem: { quantity: number; alertThreshold: number | null;
             movements: { id: string; type: string; quantity: number; reason: string | null; createdAt: string }[]
@@ -117,6 +126,9 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
         }) => ({
           id: p.id, name: p.name, unit: p.unit, ncm: p.ncm,
           categoryName: p.category?.name ?? null,
+          priceCaixa: p.priceCaixa != null ? Number(p.priceCaixa) : null,
+          labelCaixa: p.labelCaixa ?? null,
+          qtdCaixa: p.qtdCaixa ?? null,
           quantity: p.stockItem ? Number(p.stockItem.quantity) : 0,
           alertThreshold: p.stockItem?.alertThreshold ? Number(p.stockItem.alertThreshold) : null,
           recentMovements: (p.stockItem?.movements ?? []).map((m) => ({
@@ -361,12 +373,17 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
                     }`}>
                       {item.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })}
                     </span>
-                    <span className="ml-1 text-xs text-gray-400">{item.unit}</span>
+                    <span className="ml-1 text-xs text-gray-400">{unitLabel(item)}</span>
+                    {item.priceCaixa !== null && item.qtdCaixa && (
+                      <p className="text-xs text-gray-400">
+                        = {(item.quantity * item.qtdCaixa).toLocaleString("pt-BR")} {item.unit}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {item.alertThreshold !== null ? (
                       <span className="text-sm text-gray-700">
-                        {item.alertThreshold.toLocaleString("pt-BR")} {item.unit}
+                        {item.alertThreshold.toLocaleString("pt-BR")} {unitLabel(item)}
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>
@@ -446,7 +463,7 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="delta">Quantidade ({adjustItem.unit})</Label>
+                <Label htmlFor="delta">Quantidade ({unitLabel(adjustItem)})</Label>
                 <Input
                   id="delta"
                   type="number"
@@ -454,9 +471,19 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
                   min="0.001"
                   value={adjustDelta}
                   onChange={(e) => setAdjustDelta(e.target.value)}
-                  placeholder="Ex: 100"
+                  placeholder="Ex: 10"
                   required
                 />
+                {adjustItem.priceCaixa !== null && adjustItem.qtdCaixa && adjustDelta && (
+                  <p className="text-xs text-gray-400">
+                    = {(parseFloat(adjustDelta) * adjustItem.qtdCaixa).toLocaleString("pt-BR")} {adjustItem.unit}
+                  </p>
+                )}
+                {adjustItem.priceCaixa !== null && adjustItem.qtdCaixa && !adjustDelta && (
+                  <p className="text-xs text-gray-400">
+                    1 {unitLabel(adjustItem)} = {adjustItem.qtdCaixa} {adjustItem.unit}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="reason">Motivo</Label>
@@ -492,7 +519,7 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
             </p>
             <form onSubmit={handleThreshold} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="threshold">Limite mínimo ({thresholdItem.unit})</Label>
+                <Label htmlFor="threshold">Limite mínimo ({unitLabel(thresholdItem)})</Label>
                 <Input
                   id="threshold"
                   type="number"
@@ -547,7 +574,7 @@ export function EstoqueClient({ items: initialItems }: { items: StockItem[] }) {
                       <p className="text-xs text-gray-400">{fmtDate(m.createdAt)}</p>
                     </div>
                     <span className={`text-sm font-bold ${MOVE_COLOR[m.type]}`}>
-                      {m.type === "SAIDA" ? "−" : "+"}{Math.abs(m.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {historyItem.unit}
+                      {m.type === "SAIDA" ? "−" : "+"}{Math.abs(m.quantity).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {unitLabel(historyItem)}
                     </span>
                   </div>
                 ))}
