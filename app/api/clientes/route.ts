@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     cep, logradouro, numero, complemento, bairro, city, state, codigoCidade,
     financeiroNome, financeiroEmail, financeiroPhone,
     decisorNome, decisorEmail, decisorPhone,
-    observacoes,
+    observacoes, prazoBoletoDias,
   } = body;
 
   if (!name || !email || !password) {
@@ -62,6 +62,7 @@ export async function POST(req: Request) {
       decisorEmail:    decisorEmail   || null,
       decisorPhone:    decisorPhone   || null,
       observacoes:     observacoes    || null,
+      prazoBoletoDias: Number.isInteger(prazoBoletoDias) ? prazoBoletoDias : null,
     },
   });
 

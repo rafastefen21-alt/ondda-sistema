@@ -14,6 +14,9 @@ const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",
              "MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC",
              "SP","SE","TO"];
 
+// Opções fixas de prazo de boleto (em dias)
+const PRAZO_BOLETO_OPCOES = [7, 14, 15, 21, 35];
+
 const selectClass =
   "flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2";
 
@@ -41,6 +44,7 @@ type ClienteData = {
   decisorEmail?: string | null;
   decisorPhone?: string | null;
   observacoes?: string | null;
+  prazoBoletoDias?: number | null;
   active?: boolean;
 };
 
@@ -154,6 +158,9 @@ export function ClienteForm({
       decisorEmail:    fd.get("decisorEmail")    || null,
       decisorPhone:    fd.get("decisorPhone")    || null,
       observacoes:     fd.get("observacoes")     || null,
+      prazoBoletoDias: fd.get("prazoBoletoDias")
+        ? Number(fd.get("prazoBoletoDias"))
+        : null,
     };
 
     if (mode === "create") {
@@ -318,6 +325,22 @@ export function ClienteForm({
                   defaultValue={client?.financeiroEmail ?? ""}
                   placeholder="financeiro@padaria.com.br"
                 />
+              </div>
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="prazoBoletoDias">Prazo do boleto</Label>
+                <select
+                  id="prazoBoletoDias" name="prazoBoletoDias"
+                  defaultValue={client?.prazoBoletoDias != null ? String(client.prazoBoletoDias) : ""}
+                  className={selectClass}
+                >
+                  <option value="">Sem prazo (PIX / à vista)</option>
+                  {PRAZO_BOLETO_OPCOES.map((d) => (
+                    <option key={d} value={d}>{d} dias</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400">
+                  Vencimento do boleto = data da cobrança + este prazo. Deixe &quot;Sem prazo&quot; para clientes PIX / à vista.
+                </p>
               </div>
             </div>
           </CardContent>

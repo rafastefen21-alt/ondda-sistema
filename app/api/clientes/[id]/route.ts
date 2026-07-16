@@ -25,7 +25,7 @@ export async function PATCH(
     cep, logradouro, numero, complemento, bairro, city, state, codigoCidade,
     financeiroNome, financeiroEmail, financeiroPhone,
     decisorNome, decisorEmail, decisorPhone,
-    observacoes, active,
+    observacoes, active, prazoBoletoDias,
   } = body;
 
   // Garante que o cliente pertence a este tenant
@@ -65,6 +65,9 @@ export async function PATCH(
     decisorEmail:    decisorEmail   !== undefined ? decisorEmail   || null : existing.decisorEmail,
     decisorPhone:    decisorPhone   !== undefined ? decisorPhone   || null : existing.decisorPhone,
     observacoes:     observacoes    !== undefined ? observacoes    || null : existing.observacoes,
+    prazoBoletoDias: prazoBoletoDias !== undefined
+      ? (Number.isInteger(prazoBoletoDias) ? prazoBoletoDias : null)
+      : existing.prazoBoletoDias,
   };
 
   if (active !== undefined) data.active = active;

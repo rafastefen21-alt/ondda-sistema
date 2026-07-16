@@ -47,6 +47,7 @@ export default async function EditarClientePage({
         decisorEmail:    client.decisorEmail,
         decisorPhone:    client.decisorPhone,
         observacoes:     client.observacoes,
+        prazoBoletoDias: client.prazoBoletoDias,
         active:          client.active,
       }}
     />

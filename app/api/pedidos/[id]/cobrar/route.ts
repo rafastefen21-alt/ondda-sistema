@@ -23,7 +23,7 @@ export async function POST(
   const order = await prisma.order.findFirst({
     where: { id, tenantId },
     include: {
-      client: { select: { name: true, email: true, decisorEmail: true } },
+      client: { select: { name: true, email: true, decisorEmail: true, prazoBoletoDias: true } },
       items: {
         include: { product: { select: { name: true } } },
       },
@@ -65,9 +65,16 @@ export async function POST(
     (order.paymentMethod as string | null) ||
     "PIX";
 
-  // Due date: next business day (tomorrow)
+  // Vencimento:
+  // - BOLETO com prazo no cadastro do cliente → hoje + prazoBoletoDias
+  // - demais casos → próximo dia útil (amanhã), comportamento padrão
   const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 1);
+  const prazo = order.client.prazoBoletoDias;
+  if (paymentMethod === "BOLETO" && typeof prazo === "number" && prazo > 0) {
+    dueDate.setDate(dueDate.getDate() + prazo);
+  } else {
+    dueDate.setDate(dueDate.getDate() + 1);
+  }
 
   // Create payment record
   const payment = await prisma.payment.create({
