@@ -28,10 +28,12 @@ export default async function EditarClientePage({
       client={{
         id:              client.id,
         name:            client.name            ?? "",
+        nomeFantasia:    client.nomeFantasia,
         email:           client.email,
         phone:           client.phone           ?? "",
         cnpj:            client.cnpj,
         cpf:             client.cpf,
+        ie:              client.ie,
         cep:             client.cep,
         logradouro:      client.logradouro,
         numero:          client.numero,
