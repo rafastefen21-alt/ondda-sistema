@@ -192,7 +192,14 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
   const items = order.items.map((item, idx) => {
     const qty   = Number(item.quantity);
     const price = Number(item.unitPrice);
-    const cfop  = parseInt(item.product.cfop ?? (localDestino === 2 ? "6102" : "5102"), 10);
+    // CFOP do produto; o 1º dígito é ajustado conforme o destino da operação:
+    // 5xxx = interna (mesmo estado), 6xxx = interestadual. Assim um produto
+    // cadastrado como 5405 sai como 6405 numa venda para outro estado.
+    const rawCfop = item.product.cfop ?? (localDestino === 2 ? "6102" : "5102");
+    const cfopStr = /^[56]\d{3}$/.test(rawCfop)
+      ? `${localDestino === 2 ? "6" : "5"}${rawCfop.slice(1)}`
+      : rawCfop;
+    const cfop = parseInt(cfopStr, 10);
     // NCM como string com 8 dígitos — Focus NF-e espera character(8)
     const ncmStr = digits(item.product.ncm ?? "0").padStart(8, "0").slice(-8);
 
