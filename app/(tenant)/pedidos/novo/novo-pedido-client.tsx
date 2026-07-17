@@ -15,6 +15,7 @@ interface Client {
   name: string | null;
   email: string;
   role: string;
+  address: string;
 }
 
 interface Product {
@@ -84,6 +85,9 @@ export function NovoPedidoClient({
   async function handleClientChange(id: string) {
     setClientId(id);
     setCustomPrices(new Map());
+    // Puxa o endereço cadastrado do cliente para o campo de entrega
+    const selected = clients.find((c) => c.id === id);
+    setAddress(selected?.address ?? "");
     if (!id) return;
 
     setLoadingPrices(true);
@@ -330,6 +334,9 @@ export function NovoPedidoClient({
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Rua, número, bairro, cidade..."
                 />
+                <p className="text-xs text-gray-400">
+                  Preenchido com o endereço do cadastro do cliente. Você pode editar para esta entrega.
+                </p>
               </div>
             </CardContent>
           </Card>
