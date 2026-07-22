@@ -122,6 +122,10 @@ model Tenant {
   itauConta          String?  // 5 dígitos (sem o dígito)
   itauContaDac       String?  // 1 dígito (DAC)
   itauAmbiente       String?  @default("Validacao") // Validacao (teste) | Efetivacao (registra)
+  // Credenciais que o PRÓPRIO ITAÚ usa para autenticar no nosso webhook (OAuth2).
+  // Geradas por nós e cadastradas no Itaú junto com a webhook_url.
+  itauWebhookClientId     String?
+  itauWebhookClientSecret String?
   // Nosso Número da carteira 109 é responsabilidade do emissor:
   // deve ser crescente e nunca repetir.
   itauNossoNumeroSeq Int      @default(0)
@@ -386,6 +390,12 @@ model Payment {
   paidAt       DateTime?
   mpPaymentId  String?
   mpStatus     String?
+  // Boleto registrado no Itaú (carteira 109)
+  itauNossoNumero String?
+  itauIdBoleto    String?
+  linhaDigitavel  String?
+  codigoBarras    String?
+  boletoPdfUrl    String?
   status       PaymentStatus @default(PENDENTE)
   notes        String?
   createdAt    DateTime      @default(now())
@@ -395,6 +405,7 @@ model Payment {
   @@index([orderId])
   @@index([status])
   @@index([dueDate])
+  @@index([itauNossoNumero])
 }
 
 // ============================================================
