@@ -377,6 +377,83 @@ export async function emitirBoleto(params: {
   };
 }
 
+// ─── Registro do webhook de cobrança no Itaú ─────────────────────────────────
+
+/**
+ * Cadastra no Itaú a URL de callback e as credenciais que ELE usará para nos
+ * notificar a baixa dos boletos.
+ */
+export async function registrarWebhookItau(params: {
+  tenantId:     string;
+  credenciais:  CredenciaisItau;
+  webhookClientId:     string;
+  webhookClientSecret: string;
+  baseUrl:      string;
+  valorMinimo?: number;
+}): Promise<{ status: number; data: unknown }> {
+  const { credenciais: c } = params;
+  const idBeneficiario = montarIdBeneficiario(c.agencia, c.conta, c.contaDac);
+  if (!idBeneficiario) throw new Error("Agência/conta/DAC do Itaú não configurados.");
+
+  const token = await obterAccessToken(params.tenantId, c);
+  const base = params.baseUrl.replace(/\/$/, "");
+
+  const corpo = JSON.stringify({
+    data: {
+      id_beneficiario:       idBeneficiario,
+      webhook_url:           `${base}/api/webhooks/itau`,
+      webhook_oauth_url:     `${base}/api/webhooks/itau/autorizacao`,
+      webhook_client_id:     params.webhookClientId,
+      webhook_client_secret: params.webhookClientSecret,
+      valor_minimo:          params.valorMinimo ?? 0.01,
+      tipos_notificacoes:    ["BAIXA_EFETIVA", "BAIXA_OPERACIONAL"],
+    },
+  });
+
+  return requisicaoMtls(
+    ITAU_URLS.notificacoes,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":         "application/json",
+        "Content-Length":       Buffer.byteLength(corpo).toString(),
+        Authorization:          `Bearer ${token}`,
+        "x-itau-apikey":        c.clientId,
+        "x-itau-correlationID": randomUUID(),
+      },
+      body: corpo,
+    },
+    c.certificado,
+    c.chavePrivada,
+  );
+}
+
+/** Lista os webhooks já cadastrados para o beneficiário. */
+export async function consultarWebhookItau(params: {
+  tenantId:    string;
+  credenciais: CredenciaisItau;
+}): Promise<{ status: number; data: unknown }> {
+  const { credenciais: c } = params;
+  const idBeneficiario = montarIdBeneficiario(c.agencia, c.conta, c.contaDac);
+  if (!idBeneficiario) throw new Error("Agência/conta/DAC do Itaú não configurados.");
+
+  const token = await obterAccessToken(params.tenantId, c);
+
+  return requisicaoMtls(
+    `${ITAU_URLS.notificacoes}?id_beneficiario=${idBeneficiario}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization:          `Bearer ${token}`,
+        "x-itau-apikey":        c.clientId,
+        "x-itau-correlationID": randomUUID(),
+      },
+    },
+    c.certificado,
+    c.chavePrivada,
+  );
+}
+
 /** Extrai a mensagem de erro do formato de resposta do Itaú. */
 function extrairErro(data: unknown): string {
   const d = data as {

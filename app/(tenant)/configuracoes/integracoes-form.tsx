@@ -142,6 +142,28 @@ export function IntegracoesForm({ initial }: Props) {
     setter((await file.text()).trim());
   }
 
+  // Registro do webhook de baixa no Itaú
+  const [regWebhook,     setRegWebhook]     = useState(false);
+  const [resultWebhook,  setResultWebhook]  = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function registrarWebhook() {
+    setRegWebhook(true);
+    setResultWebhook(null);
+    try {
+      const res  = await fetch("/api/configuracoes/itau-webhook", { method: "POST" });
+      const data = await res.json();
+      setResultWebhook(
+        res.ok
+          ? { ok: true,  msg: "Webhook registrado no Itaú! A baixa dos boletos será automática." }
+          : { ok: false, msg: data.error ?? "Não foi possível registrar o webhook." },
+      );
+    } catch {
+      setResultWebhook({ ok: false, msg: "Erro de conexão ao registrar o webhook." });
+    } finally {
+      setRegWebhook(false);
+    }
+  }
+
   async function saveItau(e: React.FormEvent) {
     e.preventDefault();
     setLoadingItau(true);
@@ -625,10 +647,24 @@ export function IntegracoesForm({ initial }: Props) {
             {errorItau && (
               <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{errorItau}</p>
             )}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button type="submit" disabled={loadingItau}>
                 {loadingItau ? "Salvando..." : "Salvar credenciais Itaú"}
               </Button>
+              {itauConfigured && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={regWebhook}
+                  onClick={registrarWebhook}
+                >
+                  {regWebhook ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Registrando...</>
+                  ) : (
+                    "Registrar webhook de baixa"
+                  )}
+                </Button>
+              )}
               {successItau && (
                 <span className="flex items-center gap-1 text-sm text-green-600">
                   <CheckCircle className="h-4 w-4" />
@@ -636,6 +672,21 @@ export function IntegracoesForm({ initial }: Props) {
                 </span>
               )}
             </div>
+
+            {resultWebhook && (
+              <div
+                className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm ${
+                  resultWebhook.ok
+                    ? "border border-green-200 bg-green-50 text-green-700"
+                    : "border border-amber-200 bg-amber-50 text-amber-700"
+                }`}
+              >
+                {resultWebhook.ok
+                  ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <span>{resultWebhook.msg}</span>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>
