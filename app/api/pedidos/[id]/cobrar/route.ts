@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { sendCobrancaEmail } from "@/lib/email";
+import { emitirBoleto, proximoNossoNumero } from "@/lib/itau";
 
 export async function POST(
   req: NextRequest,
@@ -23,7 +24,13 @@ export async function POST(
   const order = await prisma.order.findFirst({
     where: { id, tenantId },
     include: {
-      client: { select: { name: true, email: true, decisorEmail: true, prazoBoletoDias: true } },
+      client: {
+        select: {
+          name: true, nomeFantasia: true, email: true, decisorEmail: true, prazoBoletoDias: true,
+          cnpj: true, cpf: true, logradouro: true, numero: true, complemento: true,
+          bairro: true, city: true, state: true, cep: true,
+        },
+      },
       items: {
         include: { product: { select: { name: true } } },
       },
@@ -90,11 +97,89 @@ export async function POST(
     },
   });
 
-  // Try to generate MP checkout link
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { mpAccessToken: true, name: true, emailRemetente: true },
+    select: {
+      mpAccessToken: true, name: true, emailRemetente: true, cnpj: true,
+      itauClientId: true, itauClientSecret: true, itauCertificado: true,
+      itauChavePrivada: true, itauAgencia: true, itauConta: true,
+      itauContaDac: true, itauAmbiente: true,
+    },
   });
+
+  // ── BOLETO → Itaú (convive com o Mercado Pago, que segue para PIX/cartão) ──
+  const itauPronto = !!(
+    tenant?.itauClientId && tenant.itauClientSecret &&
+    tenant.itauCertificado && tenant.itauChavePrivada &&
+    tenant.itauAgencia && tenant.itauConta && tenant.itauContaDac
+  );
+
+  if (paymentMethod === "BOLETO" && itauPronto) {
+    try {
+      const nossoNumero = await proximoNossoNumero(tenantId);
+      const boleto = await emitirBoleto({
+        tenantId,
+        credenciais: {
+          clientId:     tenant!.itauClientId!,
+          clientSecret: tenant!.itauClientSecret!,
+          certificado:  tenant!.itauCertificado!,
+          chavePrivada: tenant!.itauChavePrivada!,
+          agencia:      tenant!.itauAgencia!,
+          conta:        tenant!.itauConta!,
+          contaDac:     tenant!.itauContaDac!,
+          ambiente:     tenant!.itauAmbiente ?? "Validacao",
+        },
+        nomeBeneficiario: tenant!.name,
+        cnpjBeneficiario: tenant!.cnpj,
+        pagador: {
+          nome:        order.client.name ?? order.client.email,
+          cnpj:        order.client.cnpj,
+          cpf:         order.client.cpf,
+          logradouro:  order.client.logradouro,
+          numero:      order.client.numero,
+          complemento: order.client.complemento,
+          bairro:      order.client.bairro,
+          cidade:      order.client.city,
+          uf:          order.client.state,
+          cep:         order.client.cep,
+          email:       order.client.email,
+        },
+        valor:       total,
+        vencimento:  dueDate,
+        nossoNumero,
+        seuNumero:   order.id.slice(-10).toUpperCase(),
+      });
+
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          itauNossoNumero: boleto.nossoNumero,
+          itauIdBoleto:    boleto.idBoleto,
+          linhaDigitavel:  boleto.linhaDigitavel,
+          codigoBarras:    boleto.codigoBarras,
+        },
+      });
+
+      return NextResponse.json({
+        paymentId:      payment.id,
+        checkoutUrl:    null,
+        boleto: {
+          nossoNumero:    boleto.nossoNumero,
+          linhaDigitavel: boleto.linhaDigitavel,
+          codigoBarras:   boleto.codigoBarras,
+          vencimento:     dueDate,
+          ambiente:       tenant!.itauAmbiente ?? "Validacao",
+        },
+      });
+    } catch (err) {
+      console.error("[cobrar] Itaú erro:", err);
+      // Pagamento já existe — devolve o erro para o operador decidir
+      return NextResponse.json(
+        { paymentId: payment.id, checkoutUrl: null, itauError: (err as Error).message },
+        { status: 502 },
+      );
+    }
+  }
 
   if (!tenant?.mpAccessToken) {
     return NextResponse.json({ paymentId: payment.id, checkoutUrl: null });
