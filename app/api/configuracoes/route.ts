@@ -35,6 +35,15 @@ const schema = z.object({
   // Z-API (WhatsApp)
   zapiInstanceId:   z.string().optional().nullable(),
   zapiToken:        z.string().optional().nullable(),
+  // Itaú — API de Cobrança
+  itauClientId:     z.string().optional().nullable(),
+  itauClientSecret: z.string().optional().nullable(),
+  itauCertificado:  z.string().optional().nullable(),
+  itauChavePrivada: z.string().optional().nullable(),
+  itauAgencia:      z.string().max(4).optional().nullable(),
+  itauConta:        z.string().max(6).optional().nullable(),
+  itauContaDac:     z.string().max(1).optional().nullable(),
+  itauAmbiente:     z.enum(["Validacao", "Efetivacao"]).optional(),
   // Notificações automáticas
   notificacoes:     z.record(z.string(), z.unknown()).optional().nullable(),
 });
@@ -88,6 +97,15 @@ export async function PATCH(req: NextRequest) {
       ...(d.emailRemetente   !== undefined ? { emailRemetente:   d.emailRemetente   || null } : {}),
       ...(d.zapiInstanceId   !== undefined ? { zapiInstanceId:   d.zapiInstanceId   || null } : {}),
       ...(d.zapiToken        !== undefined ? { zapiToken:        d.zapiToken        || null } : {}),
+      // Itaú
+      ...(d.itauClientId     !== undefined ? { itauClientId:     d.itauClientId     || null } : {}),
+      ...(d.itauClientSecret !== undefined ? { itauClientSecret: d.itauClientSecret || null } : {}),
+      ...(d.itauCertificado  !== undefined ? { itauCertificado:  d.itauCertificado  || null } : {}),
+      ...(d.itauChavePrivada !== undefined ? { itauChavePrivada: d.itauChavePrivada || null } : {}),
+      ...(d.itauAgencia      !== undefined ? { itauAgencia:      d.itauAgencia      || null } : {}),
+      ...(d.itauConta        !== undefined ? { itauConta:        d.itauConta        || null } : {}),
+      ...(d.itauContaDac     !== undefined ? { itauContaDac:     d.itauContaDac     || null } : {}),
+      ...(d.itauAmbiente     !== undefined ? { itauAmbiente:     d.itauAmbiente } : {}),
       ...(d.notificacoes !== undefined
         ? { notificacoes: d.notificacoes != null ? (d.notificacoes as Prisma.InputJsonValue) : Prisma.DbNull }
         : {}),

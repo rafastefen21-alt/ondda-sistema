@@ -112,6 +112,20 @@ model Tenant {
   zapiInstanceId   String?
   zapiToken        String?
 
+  // Itaú — API de Cobrança (boleto registrado). Carteira 109.
+  // Auth = mTLS (certificado + chave) + OAuth2 client_credentials.
+  itauClientId       String?
+  itauClientSecret   String?
+  itauCertificado    String?  // conteúdo PEM do .crt
+  itauChavePrivada   String?  // conteúdo PEM do .key
+  itauAgencia        String?  // 4 dígitos
+  itauConta          String?  // 5 dígitos (sem o dígito)
+  itauContaDac       String?  // 1 dígito (DAC)
+  itauAmbiente       String?  @default("Validacao") // Validacao (teste) | Efetivacao (registra)
+  // Nosso Número da carteira 109 é responsabilidade do emissor:
+  // deve ser crescente e nunca repetir.
+  itauNossoNumeroSeq Int      @default(0)
+
   // Configurações de notificações automáticas (JSON — ver lib/notificacoes.ts)
   notificacoes     Json?
 

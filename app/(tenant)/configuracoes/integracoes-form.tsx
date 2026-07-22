@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   CheckCircle, CreditCard, Eye, EyeOff, Link2, FileText,
-  AlertCircle, User, LogOut, Loader2, Mail, MessageCircle,
+  AlertCircle, User, LogOut, Loader2, Mail, MessageCircle, Landmark,
 } from "lucide-react";
 
 const selectClass =
@@ -31,6 +31,14 @@ interface Props {
     emailRemetente: string | null;
     zapiInstanceId: string | null;
     zapiToken:      string | null;
+    itauClientId:     string | null;
+    itauClientSecret: string | null;
+    itauCertificado:  string | null;
+    itauChavePrivada: string | null;
+    itauAgencia:      string | null;
+    itauConta:        string | null;
+    itauContaDac:     string | null;
+    itauAmbiente:     string | null;
   };
 }
 
@@ -104,6 +112,64 @@ export function IntegracoesForm({ initial }: Props) {
   const [errorZapi,       setErrorZapi]       = useState("");
   const [testingZapi,     setTestingZapi]     = useState(false);
   const [testResultZapi,  setTestResultZapi]  = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // ── Itaú (API de Cobrança) state ─────────────────────────────────────────────
+  const [itauClientId,     setItauClientId]     = useState(initial.itauClientId     ?? "");
+  const [itauClientSecret, setItauClientSecret] = useState(initial.itauClientSecret ?? "");
+  const [itauCertificado,  setItauCertificado]  = useState(initial.itauCertificado  ?? "");
+  const [itauChavePrivada, setItauChavePrivada] = useState(initial.itauChavePrivada ?? "");
+  const [itauAgencia,      setItauAgencia]      = useState(initial.itauAgencia      ?? "");
+  const [itauConta,        setItauConta]        = useState(initial.itauConta        ?? "");
+  const [itauContaDac,     setItauContaDac]     = useState(initial.itauContaDac     ?? "");
+  const [itauAmbiente,     setItauAmbiente]     = useState(initial.itauAmbiente     ?? "Validacao");
+  const [showItauSecret,   setShowItauSecret]   = useState(false);
+  const [loadingItau,      setLoadingItau]      = useState(false);
+  const [successItau,      setSuccessItau]      = useState(false);
+  const [errorItau,        setErrorItau]        = useState("");
+
+  // id_beneficiario = Agência(4) + "00" + Conta(5) + DAC(1)
+  const idBeneficiario =
+    itauAgencia && itauConta && itauContaDac
+      ? `${itauAgencia.padStart(4, "0")}00${itauConta.padStart(5, "0")}${itauContaDac}`
+      : "";
+
+  async function lerArquivo(
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: (v: string) => void,
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setter((await file.text()).trim());
+  }
+
+  async function saveItau(e: React.FormEvent) {
+    e.preventDefault();
+    setLoadingItau(true);
+    setErrorItau("");
+    setSuccessItau(false);
+    const res = await fetch("/api/configuracoes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itauClientId:     itauClientId     || null,
+        itauClientSecret: itauClientSecret || null,
+        itauCertificado:  itauCertificado  || null,
+        itauChavePrivada: itauChavePrivada || null,
+        itauAgencia:      itauAgencia      || null,
+        itauConta:        itauConta        || null,
+        itauContaDac:     itauContaDac     || null,
+        itauAmbiente,
+      }),
+    });
+    setLoadingItau(false);
+    if (!res.ok) {
+      setErrorItau("Erro ao salvar. Verifique os dados.");
+    } else {
+      setSuccessItau(true);
+      router.refresh();
+      setTimeout(() => setSuccessItau(false), 3000);
+    }
+  }
 
   // ── Salvar credenciais MP manualmente ────────────────────────────────────────
   async function saveMp(e: React.FormEvent) {
@@ -232,6 +298,11 @@ export function IntegracoesForm({ initial }: Props) {
 
   const nfeConfigured  = !!initial.focusNfeToken;
   const zapiConfigured = !!(initial.zapiInstanceId && initial.zapiToken);
+  const itauConfigured = !!(
+    initial.itauClientId && initial.itauClientSecret &&
+    initial.itauCertificado && initial.itauChavePrivada &&
+    initial.itauAgencia && initial.itauConta
+  );
 
   return (
     <div className="space-y-4">
@@ -397,6 +468,168 @@ export function IntegracoesForm({ initial }: Props) {
                 {loadingMp ? "Salvando..." : "Salvar credenciais"}
               </Button>
               {successMp && (
+                <span className="flex items-center gap-1 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Salvo com sucesso!
+                </span>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ── Boleto Itaú (API de Cobrança) ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Landmark className="h-5 w-5 text-orange-500" />
+            Boleto Itaú — API de Cobrança
+            <span
+              className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
+                itauConfigured ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {itauConfigured ? "Configurado" : "Pendente"}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-gray-500">
+            Emite boleto registrado direto no Itaú (carteira 109). O vencimento usa o
+            prazo de boleto cadastrado no cliente.
+          </p>
+
+          <form onSubmit={saveItau} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="itauClientId">Client ID</Label>
+                <Input
+                  id="itauClientId"
+                  placeholder="Recebido no e-mail do Itaú"
+                  value={itauClientId}
+                  onChange={(e) => setItauClientId(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="itauClientSecret">Client Secret</Label>
+                <div className="relative">
+                  <Input
+                    id="itauClientSecret"
+                    type={showItauSecret ? "text" : "password"}
+                    placeholder="Gerado na etapa do certificado"
+                    value={itauClientSecret}
+                    onChange={(e) => setItauClientSecret(e.target.value)}
+                    autoComplete="off"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowItauSecret(!showItauSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showItauSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Certificado e chave */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="itauCertFile">Certificado (.crt)</Label>
+                <input
+                  id="itauCertFile"
+                  type="file"
+                  accept=".crt,.pem,.cer,text/plain"
+                  onChange={(e) => lerArquivo(e, setItauCertificado)}
+                  className="block w-full text-sm text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
+                />
+                <p className={`text-xs ${itauCertificado ? "text-green-600" : "text-gray-400"}`}>
+                  {itauCertificado ? "✓ Certificado carregado" : "Selecione o itau_certificado.crt"}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="itauKeyFile">Chave privada (.key)</Label>
+                <input
+                  id="itauKeyFile"
+                  type="file"
+                  accept=".key,.pem,text/plain"
+                  onChange={(e) => lerArquivo(e, setItauChavePrivada)}
+                  className="block w-full text-sm text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
+                />
+                <p className={`text-xs ${itauChavePrivada ? "text-green-600" : "text-gray-400"}`}>
+                  {itauChavePrivada ? "✓ Chave carregada" : "Selecione o itau_chave.key"}
+                </p>
+              </div>
+            </div>
+
+            {/* Conta */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="itauAgencia">Agência</Label>
+                <Input
+                  id="itauAgencia"
+                  placeholder="0000"
+                  maxLength={4}
+                  value={itauAgencia}
+                  onChange={(e) => setItauAgencia(e.target.value.replace(/\D/g, ""))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="itauConta">Conta (sem dígito)</Label>
+                <Input
+                  id="itauConta"
+                  placeholder="00000"
+                  maxLength={5}
+                  value={itauConta}
+                  onChange={(e) => setItauConta(e.target.value.replace(/\D/g, ""))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="itauContaDac">DAC</Label>
+                <Input
+                  id="itauContaDac"
+                  placeholder="0"
+                  maxLength={1}
+                  value={itauContaDac}
+                  onChange={(e) => setItauContaDac(e.target.value.replace(/\D/g, ""))}
+                />
+              </div>
+            </div>
+
+            {idBeneficiario && (
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <span className="font-medium">id_beneficiario:</span>{" "}
+                <code>{idBeneficiario}</code>{" "}
+                <span className="text-gray-400">(agência + 00 + conta + DAC)</span>
+              </p>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="itauAmbiente">Ambiente</Label>
+              <select
+                id="itauAmbiente"
+                value={itauAmbiente}
+                onChange={(e) => setItauAmbiente(e.target.value)}
+                className={selectClass}
+              >
+                <option value="Validacao">Validação (teste — não registra o boleto)</option>
+                <option value="Efetivacao">Efetivação (produção — registra de verdade)</option>
+              </select>
+              <p className="text-xs text-gray-400">
+                Comece em Validação. Só mude para Efetivação após homologar com o Itaú.
+              </p>
+            </div>
+
+            {errorItau && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{errorItau}</p>
+            )}
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={loadingItau}>
+                {loadingItau ? "Salvando..." : "Salvar credenciais Itaú"}
+              </Button>
+              {successItau && (
                 <span className="flex items-center gap-1 text-sm text-green-600">
                   <CheckCircle className="h-4 w-4" />
                   Salvo com sucesso!

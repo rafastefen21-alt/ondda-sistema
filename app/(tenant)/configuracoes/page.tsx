@@ -177,6 +177,14 @@ export default async function ConfiguracoesPage() {
                 emailRemetente: tenant.emailRemetente ?? null,
                 zapiInstanceId: tenant.zapiInstanceId ?? null,
                 zapiToken:      tenant.zapiToken      ?? null,
+                itauClientId:     tenant.itauClientId     ?? null,
+                itauClientSecret: tenant.itauClientSecret ?? null,
+                itauCertificado:  tenant.itauCertificado  ?? null,
+                itauChavePrivada: tenant.itauChavePrivada ?? null,
+                itauAgencia:      tenant.itauAgencia      ?? null,
+                itauConta:        tenant.itauConta        ?? null,
+                itauContaDac:     tenant.itauContaDac     ?? null,
+                itauAmbiente:     tenant.itauAmbiente     ?? null,
               }}
             />
           )}
