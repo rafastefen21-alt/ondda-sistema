@@ -152,11 +152,24 @@ export function IntegracoesForm({ initial }: Props) {
     try {
       const res  = await fetch("/api/configuracoes/itau-webhook", { method: "POST" });
       const data = await res.json();
-      setResultWebhook(
-        res.ok
-          ? { ok: true,  msg: "Webhook registrado no Itaú! A baixa dos boletos será automática." }
-          : { ok: false, msg: data.error ?? "Não foi possível registrar o webhook." },
-      );
+      if (res.ok) {
+        setResultWebhook({ ok: true, msg: "Webhook registrado no Itaú! A baixa dos boletos será automática." });
+      } else {
+        // Extrai a mensagem que o Itaú devolveu (data.data) para diagnóstico
+        const itau = data.data as
+          | { mensagem?: string; messages?: Array<{ mensagem?: string }>;
+              campos?: Array<{ campo?: string; mensagem?: string }> }
+          | string | undefined;
+        let detalhe = "";
+        if (typeof itau === "string") detalhe = itau;
+        else if (itau?.campos?.length) detalhe = itau.campos.map((c) => `${c.campo}: ${c.mensagem}`).join("; ");
+        else detalhe = itau?.mensagem ?? itau?.messages?.[0]?.mensagem ?? (itau ? JSON.stringify(itau).slice(0, 300) : "");
+        const status = data.status ? ` [HTTP ${data.status}]` : "";
+        setResultWebhook({
+          ok: false,
+          msg: `${data.error ?? "Não foi possível registrar o webhook."}${status}${detalhe ? " — " + detalhe : ""}`,
+        });
+      }
     } catch {
       setResultWebhook({ ok: false, msg: "Erro de conexão ao registrar o webhook." });
     } finally {
