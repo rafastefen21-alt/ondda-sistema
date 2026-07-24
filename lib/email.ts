@@ -296,6 +296,101 @@ export async function sendCobrancaEmail(
   }
 }
 
+// ─── Template boleto (com PDF anexado) ───────────────────────────────────────
+
+function boletoHtml(
+  tenantName: string, clientName: string, shortId: string,
+  total: number, linhaDigitavel: string, dueDate?: Date | null,
+): string {
+  const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const dueLine = dueDate
+    ? `<p style="margin:0 0 8px; font-size:14px; color:#374151;"><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleDateString("pt-BR")}</p>`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0; padding:0; background:#f9fafb; font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="background:#fff; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; max-width:560px; width:100%;">
+        <tr>
+          <td style="background:#ea580c; padding:24px 32px; text-align:center;">
+            <p style="margin:0; font-size:18px; font-weight:700; color:#fff;">${tenantName}</p>
+            <p style="margin:4px 0 0; font-size:13px; color:#fed7aa;">Boleto — Pedido #${shortId}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 0; text-align:center;">
+            <span style="display:inline-block; background:#ea580c18; color:#ea580c;
+                         border:1px solid #ea580c40; border-radius:999px; padding:6px 20px;
+                         font-size:22px; font-weight:700;">
+              ${fmtBrl(total)}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px;">
+            <p style="margin:0 0 16px; font-size:15px; color:#374151;">Olá, <strong>${clientName}</strong>!</p>
+            <p style="margin:0 0 16px; font-size:14px; color:#6b7280;">
+              Segue o <strong>boleto</strong> referente ao pedido <strong>#${shortId}</strong>
+              (o PDF está anexado a este e-mail).
+            </p>
+            ${dueLine}
+            <p style="margin:16px 0 6px; font-size:12px; color:#6b7280;">Linha digitável:</p>
+            <p style="margin:0; padding:12px; background:#f3f4f6; border-radius:8px;
+                      font-family:monospace; font-size:13px; color:#111; text-align:center; word-break:break-all;">
+              ${linhaDigitavel}
+            </p>
+            <p style="margin:16px 0 0; font-size:12px; color:#9ca3af; text-align:center;">
+              Pague pelo app do seu banco, internet banking ou em qualquer agência/lotérica.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px 24px; border-top:1px solid #f3f4f6; text-align:center;">
+            <p style="margin:0; font-size:12px; color:#9ca3af;">
+              Este email foi enviado automaticamente por ${tenantName}.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** Envia o boleto por e-mail com o PDF anexado. Falha silenciosa com log. */
+export async function sendBoletoEmail(params: {
+  to: string | string[];
+  tenantName: string;
+  clientName: string;
+  orderId: string;
+  total: number;
+  linhaDigitavel: string;
+  pdf: Buffer;
+  dueDate?: Date | null;
+  fromOverride?: string | null;
+}): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  const recipients = (Array.isArray(params.to) ? params.to : [params.to]).filter(Boolean) as string[];
+  if (recipients.length === 0) return;
+  const shortId = params.orderId.slice(-8).toUpperCase();
+  try {
+    await getResend().emails.send({
+      from:    params.fromOverride?.trim() || FROM,
+      to:      recipients,
+      subject: `Boleto #${shortId} — ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(params.total)} | ${params.tenantName}`,
+      html:    boletoHtml(params.tenantName, params.clientName, shortId, params.total, params.linhaDigitavel, params.dueDate),
+      attachments: [{ filename: `boleto-${shortId}.pdf`, content: params.pdf }],
+    });
+    console.log("[EMAIL] boleto enviado para", recipients);
+  } catch (err) {
+    console.error("[EMAIL] erro boleto:", err);
+  }
+}
+
 // ─── Template pagamento confirmado ────────────────────────────────────────────
 
 function pagamentoConfirmadoHtml(tenantName: string, clientName: string, shortId: string, total: number): string {
