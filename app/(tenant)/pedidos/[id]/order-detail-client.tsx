@@ -54,6 +54,7 @@ interface Payment {
   dueDate: Date;
   paidAt: Date | null;
   status: string;
+  itauNossoNumero?: string | null;
 }
 
 interface Invoice {
@@ -207,12 +208,16 @@ export function OrderDetailClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error ?? "Erro ao gerar cobrança.");
+        alert(data.itauError ?? data.error ?? "Erro ao gerar cobrança.");
         return;
       }
       router.refresh();
       if (data.checkoutUrl) {
         setMpLinks((prev) => ({ ...prev, [data.paymentId]: data.checkoutUrl }));
+      }
+      if (data.boleto?.linhaDigitavel) {
+        const teste = data.boleto.ambiente !== "Efetivacao" ? "\n\n(Ambiente de VALIDAÇÃO — boleto de teste)" : "";
+        alert(`Boleto Itaú gerado!\n\nLinha digitável:\n${data.boleto.linhaDigitavel}${teste}`);
       }
     } catch {
       alert("Erro de conexão ao gerar cobrança.");
@@ -770,6 +775,18 @@ export function OrderDetailClient({
                                 {p.status}
                               </span>
                             </div>
+                            {p.itauNossoNumero && (
+                              <a
+                                href={`/api/pagamentos/${p.id}/boleto`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Baixar boleto Itaú (PDF)"
+                                className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                Boleto
+                              </a>
+                            )}
                             {canUseMp && p.status !== "PAGO" && (
                               <>
                                 <button
