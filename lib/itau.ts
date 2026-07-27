@@ -337,7 +337,10 @@ export async function emitirBoleto(params: {
     },
   };
 
-  const corpo = JSON.stringify(payload);
+  // A API do Itaú exige o corpo dentro de um objeto "data" (mesmo padrão da
+  // resposta e do webhook). Sem isso, ela responde "O campo data ... não pode
+  // ser nulo".
+  const corpo = JSON.stringify({ data: payload });
   const { status, data } = await requisicaoMtls(
     ITAU_URLS.boletos,
     {
