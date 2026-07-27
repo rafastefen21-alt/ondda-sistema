@@ -314,18 +314,25 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       : null;
 
     // ── NF-e automática (toda aprovação, se a Focus estiver configurada) ──
-    const nfConfigurada = !!tenant.focusNfeToken;
+    // A NF só "prende" o boleto se realmente entrou em processamento. Se nem
+    // pôde ser emitida (dados fiscais faltando) ou foi rejeitada, o boleto sai.
     let nfNumero: string | null = null;
-    if (nfConfigurada) {
+    let nfProcessando = false;
+    if (tenant.focusNfeToken) {
       const invoiceId = await autoEmitirNfe(orderId, tenantId);
-      if (invoiceId) nfNumero = await aguardarAutorizacaoNfe(invoiceId, tenantId);
+      if (invoiceId) {
+        const r = await aguardarAutorizacaoNfe(invoiceId, tenantId);
+        nfNumero = r.numero;
+        nfProcessando = r.aindaProcessando;
+      }
     }
 
     // ── BOLETO ITAÚ ──
     if (usaItau && payment) {
-      // "Boleto espera a NF": se a NF está configurada mas ainda não autorizou,
-      // não emite o boleto agora — o fallback emite quando a NF autorizar.
-      if (nfConfigurada && !nfNumero) {
+      // Só espera se a NF ainda está processando; o fallback emite quando ela
+      // autorizar. Se a NF não pôde ser emitida ou foi rejeitada, o boleto sai
+      // agora (sem o número).
+      if (nfProcessando) {
         console.log("[COBRANCA-AUTO] boleto aguardando autorização da NF-e:", orderId);
         return;
       }

@@ -13,27 +13,30 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Aguarda a autorização da NF-e na SEFAZ (consulta o status algumas vezes).
- * Retorna o número da NF quando autorizada, ou null se ainda estiver
- * processando/erro dentro da janela. Atualiza o Invoice a cada consulta.
+ * Retorna:
+ *  - numero: preenchido quando autorizada;
+ *  - aindaProcessando: true se, ao fim da janela, a NF continua em
+ *    processamento (o boleto deve esperar); false se autorizou ou deu erro
+ *    (o boleto pode seguir — com número, se houver).
  */
 export async function aguardarAutorizacaoNfe(
   invoiceId: string,
   tenantId: string,
   tentativas = 6,
   delayMs = 1800,
-): Promise<string | null> {
+): Promise<{ numero: string | null; aindaProcessando: boolean }> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { focusNfeToken: true, nfeAmbiente: true },
   });
-  if (!tenant?.focusNfeToken) return null;
+  if (!tenant?.focusNfeToken) return { numero: null, aindaProcessando: false };
 
   for (let i = 0; i < tentativas; i++) {
     await sleep(delayMs);
     const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
-    if (!invoice?.focusNfeRef) return null;
-    if (invoice.status === "EMITIDA") return invoice.number;
-    if (invoice.status === "ERRO" || invoice.status === "CANCELADA") return null;
+    if (!invoice?.focusNfeRef) return { numero: null, aindaProcessando: false };
+    if (invoice.status === "EMITIDA") return { numero: invoice.number, aindaProcessando: false };
+    if (invoice.status === "ERRO" || invoice.status === "CANCELADA") return { numero: null, aindaProcessando: false };
 
     const { data } = await checkNfeStatus(
       invoice.focusNfeRef, tenant.focusNfeToken, tenant.nfeAmbiente ?? "homologacao",
@@ -57,10 +60,10 @@ export async function aguardarAutorizacaoNfe(
       },
     });
 
-    if (status === "EMITIDA") return data.numero ?? null;
-    if (status === "ERRO" || status === "CANCELADA") return null;
+    if (status === "EMITIDA") return { numero: data.numero ?? null, aindaProcessando: false };
+    if (status === "ERRO" || status === "CANCELADA") return { numero: null, aindaProcessando: false };
   }
-  return null; // ainda processando após a janela
+  return { numero: null, aindaProcessando: true }; // ainda processando após a janela
 }
 
 /**
