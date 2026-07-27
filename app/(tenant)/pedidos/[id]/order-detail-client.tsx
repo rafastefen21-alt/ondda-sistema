@@ -24,6 +24,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Send,
+  Mail,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +58,8 @@ interface Payment {
   paidAt: Date | null;
   status: string;
   itauNossoNumero?: string | null;
+  boletoEmailEnviadoEm?: Date | string | null;
+  boletoWhatsappEnviadoEm?: Date | string | null;
 }
 
 interface Invoice {
@@ -884,6 +888,39 @@ export function OrderDetailClient({
                             )}
                           </div>
                         </div>
+
+                        {/* Status de envio do boleto ao cliente */}
+                        {p.itauNossoNumero && (
+                          <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                            <span className="text-xs font-medium text-gray-500">Envio ao cliente:</span>
+                            <span
+                              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                p.boletoEmailEnviadoEm
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-500"
+                              }`}
+                              title={p.boletoEmailEnviadoEm ? `Enviado em ${formatDateTime(p.boletoEmailEnviadoEm)}` : "Não enviado por e-mail"}
+                            >
+                              <Mail className="h-3 w-3" />
+                              {p.boletoEmailEnviadoEm
+                                ? `E-mail enviado ${formatDateTime(p.boletoEmailEnviadoEm)}`
+                                : "E-mail não enviado"}
+                            </span>
+                            <span
+                              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                p.boletoWhatsappEnviadoEm
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-500"
+                              }`}
+                              title={p.boletoWhatsappEnviadoEm ? `Enviado em ${formatDateTime(p.boletoWhatsappEnviadoEm)}` : "Não enviado por WhatsApp"}
+                            >
+                              <MessageCircle className="h-3 w-3" />
+                              {p.boletoWhatsappEnviadoEm
+                                ? `WhatsApp enviado ${formatDateTime(p.boletoWhatsappEnviadoEm)}`
+                                : "WhatsApp não enviado"}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Link panel — appears after generating */}
                         {mpLinks[p.id] && (

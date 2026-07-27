@@ -361,7 +361,7 @@ function boletoHtml(
 </html>`;
 }
 
-/** Envia o boleto por e-mail com o PDF anexado. Falha silenciosa com log. */
+/** Envia o boleto por e-mail com o PDF anexado. Retorna true se enviou. */
 export async function sendBoletoEmail(params: {
   to: string | string[];
   tenantName: string;
@@ -372,10 +372,10 @@ export async function sendBoletoEmail(params: {
   pdf: Buffer;
   dueDate?: Date | null;
   fromOverride?: string | null;
-}): Promise<void> {
-  if (!process.env.RESEND_API_KEY) return;
+}): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) return false;
   const recipients = (Array.isArray(params.to) ? params.to : [params.to]).filter(Boolean) as string[];
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) return false;
   const shortId = params.orderId.slice(-8).toUpperCase();
   try {
     await getResend().emails.send({
@@ -386,8 +386,10 @@ export async function sendBoletoEmail(params: {
       attachments: [{ filename: `boleto-${shortId}.pdf`, content: params.pdf }],
     });
     console.log("[EMAIL] boleto enviado para", recipients);
+    return true;
   } catch (err) {
     console.error("[EMAIL] erro boleto:", err);
+    return false;
   }
 }
 

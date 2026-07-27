@@ -124,10 +124,13 @@ export async function emitirBoletoPagamento(
     )];
     const phone = client.phone ?? client.decisorPhone ?? null;
 
+    let emailOk = false;
+    let waOk = false;
+
     if (notif.email.cobrancaGerada && recipients.length) {
       const pdf = await renderBoletoPdfById(payment.id, tenantId);
       if (pdf) {
-        await sendBoletoEmail({
+        emailOk = await sendBoletoEmail({
           to: recipients, tenantName: tenant.name, clientName, orderId: payment.orderId,
           total, linhaDigitavel: boleto.linhaDigitavel, pdf, dueDate: payment.dueDate,
           fromOverride: tenant.emailRemetente,
@@ -139,8 +142,18 @@ export async function emitirBoletoPagamento(
       const msg = renderNotifMessage(notif.mensagens.cobrancaGerada, {
         nome: clientName, pedido: shortId, valor: fmtBrl(total),
       }) + `\n\nBoleto (linha digitável):\n${boleto.linhaDigitavel}`;
-      zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg)
-        .catch((e) => console.error("[BOLETO] WA error:", e));
+      const r = await zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg);
+      waOk = r.success;
+    }
+
+    if (emailOk || waOk) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          ...(emailOk ? { boletoEmailEnviadoEm: new Date() } : {}),
+          ...(waOk ? { boletoWhatsappEnviadoEm: new Date() } : {}),
+        },
+      });
     }
   }
 
@@ -199,12 +212,11 @@ export async function reenviarBoletoPagamento(
   if (recipients.length) {
     const pdf = await renderBoletoPdfById(payment.id, tenantId);
     if (pdf) {
-      await sendBoletoEmail({
+      email = await sendBoletoEmail({
         to: recipients, tenantName: tenant.name, clientName, orderId: payment.orderId,
         total, linhaDigitavel: payment.linhaDigitavel, pdf, dueDate: payment.dueDate,
         fromOverride: tenant.emailRemetente,
       });
-      email = true;
     }
   }
 
@@ -214,13 +226,22 @@ export async function reenviarBoletoPagamento(
     const msg =
       `Olá, ${clientName}! Segue o boleto do pedido #${shortId} — ${fmtBrl(total)}.\n\n` +
       `Linha digitável:\n${payment.linhaDigitavel}`;
-    await zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg);
-    whatsapp = true;
+    const r = await zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg);
+    whatsapp = r.success;
   }
 
   if (!email && !whatsapp) {
-    throw new Error("Cliente sem e-mail e sem WhatsApp configurado para envio.");
+    throw new Error("Não foi possível enviar: cliente sem e-mail e sem WhatsApp válido.");
   }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      ...(email ? { boletoEmailEnviadoEm: new Date() } : {}),
+      ...(whatsapp ? { boletoWhatsappEnviadoEm: new Date() } : {}),
+    },
+  });
+
   return { email, whatsapp };
 }
 

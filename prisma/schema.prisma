@@ -396,6 +396,9 @@ model Payment {
   linhaDigitavel  String?
   codigoBarras    String?
   boletoPdfUrl    String?
+  // Confirmação de envio do boleto ao cliente
+  boletoEmailEnviadoEm    DateTime?
+  boletoWhatsappEnviadoEm DateTime?
   status       PaymentStatus @default(PENDENTE)
   notes        String?
   createdAt    DateTime      @default(now())
