@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { deductStockForOrder } from "@/lib/stock";
+import { autoGerarCobranca } from "@/lib/cobranca-service";
+
+// Criar já como Aprovado dispara NF-e + boleto (pode levar alguns segundos).
+export const maxDuration = 60;
 
 const PAYMENT_METHODS = ["PIX", "BOLETO", "CARTAO_CREDITO", "CARTAO_DEBITO", "DINHEIRO", "TRANSFERENCIA"] as const;
 
@@ -94,6 +99,17 @@ export async function POST(req: NextRequest) {
     },
     include: { items: true },
   });
+
+  // Se foi criado já APROVADO, dispara os mesmos efeitos da aprovação:
+  // baixa de estoque + NF-e automática + cobrança (boleto/MP).
+  if (initialStatus === "APROVADO") {
+    try {
+      await deductStockForOrder(tenantId, order.id);
+    } catch (err) {
+      console.error("[STOCK] erro ao descontar estoque (criação aprovada):", err);
+    }
+    await autoGerarCobranca(order.id, tenantId);
+  }
 
   return NextResponse.json(order, { status: 201 });
 }
