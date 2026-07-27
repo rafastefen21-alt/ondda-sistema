@@ -9,6 +9,10 @@ import { autoGerarCobranca } from "@/lib/cobranca-service";
 import { mergeNotificacoes, renderNotifMessage, STATUS_TO_WA_KEY, STATUS_TO_MSG_KEY } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
 
+// A aprovação emite NF-e, aguarda a autorização e emite o boleto — pode levar
+// alguns segundos. Amplia o limite de execução na Vercel.
+export const maxDuration = 60;
+
 const updateStatusSchema = z.object({
   status: z.enum([
     "RASCUNHO",

@@ -5,11 +5,69 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { validateNfeReady, buildNfePayload, submitNfe } from "@/lib/nfe";
+import { validateNfeReady, buildNfePayload, submitNfe, checkNfeStatus } from "@/lib/nfe";
 import { sendNfeEmail } from "@/lib/email";
 import { mergeNotificacoes } from "@/lib/notificacoes";
 
-export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<void> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Aguarda a autorização da NF-e na SEFAZ (consulta o status algumas vezes).
+ * Retorna o número da NF quando autorizada, ou null se ainda estiver
+ * processando/erro dentro da janela. Atualiza o Invoice a cada consulta.
+ */
+export async function aguardarAutorizacaoNfe(
+  invoiceId: string,
+  tenantId: string,
+  tentativas = 6,
+  delayMs = 1800,
+): Promise<string | null> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { focusNfeToken: true, nfeAmbiente: true },
+  });
+  if (!tenant?.focusNfeToken) return null;
+
+  for (let i = 0; i < tentativas; i++) {
+    await sleep(delayMs);
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.focusNfeRef) return null;
+    if (invoice.status === "EMITIDA") return invoice.number;
+    if (invoice.status === "ERRO" || invoice.status === "CANCELADA") return null;
+
+    const { data } = await checkNfeStatus(
+      invoice.focusNfeRef, tenant.focusNfeToken, tenant.nfeAmbiente ?? "homologacao",
+    );
+    const status =
+      data.status === "autorizado" ? "EMITIDA" as const
+      : data.status === "cancelado" ? "CANCELADA" as const
+      : (data.status === "erro" || data.status === "rejeitado" || data.status === "denegado") ? "ERRO" as const
+      : "PROCESSANDO" as const;
+
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status,
+        number:    data.numero    ?? invoice.number,
+        accessKey: data.chave_nfe ?? invoice.accessKey,
+        xmlUrl:    data.caminho_xml_nota_fiscal ?? data.caminho_xml ?? invoice.xmlUrl,
+        pdfUrl:    data.caminho_danfe ?? invoice.pdfUrl,
+        issuedAt:  data.data_emissao ? new Date(data.data_emissao) : invoice.issuedAt,
+        errorMsg:  data.erros ? JSON.stringify(data.erros).slice(0, 500) : invoice.errorMsg,
+      },
+    });
+
+    if (status === "EMITIDA") return data.numero ?? null;
+    if (status === "ERRO" || status === "CANCELADA") return null;
+  }
+  return null; // ainda processando após a janela
+}
+
+/**
+ * Emite a NF-e do pedido. Retorna o id do Invoice criado (ou null se não
+ * emitiu — sem token, dados incompletos, já emitida, ou erro).
+ */
+export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<string | null> {
   try {
     const [order, tenant] = await Promise.all([
       prisma.order.findFirst({
@@ -43,7 +101,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
       }),
     ]);
 
-    if (!order || !tenant?.focusNfeToken) return;
+    if (!order || !tenant?.focusNfeToken) return null;
 
     // Já existe NF-e emitida ou processando para este pedido
     const active = order.invoices.find(
@@ -51,7 +109,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
     );
     if (active) {
       console.log("[NFE-AUTO] NF-e já existe para pedido", orderId);
-      return;
+      return active.id;
     }
 
     const nfeOrder = {
@@ -88,7 +146,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
     const validation = validateNfeReady(nfeOrder, nfeTenant);
     if (!validation.valid) {
       console.log("[NFE-AUTO] dados insuficientes para emissão automática:", validation.missing);
-      return;
+      return null;
     }
 
     const emissionNumber = order.invoices.length + 1;
@@ -117,7 +175,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
         data: { status: "ERRO", errorMsg: JSON.stringify(focusData).slice(0, 500) },
       });
       console.error("[NFE-AUTO] erro Focus NF-e HTTP", httpStatus, focusData);
-      return;
+      return null;
     }
 
     const updated = await prisma.invoice.update({
@@ -148,7 +206,9 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
       }
       console.log("[NFE-AUTO] NF-e emitida e email enviado para pedido", orderId);
     }
+    return updated.id;
   } catch (err) {
     console.error("[NFE-AUTO] erro inesperado:", err);
+    return null;
   }
 }

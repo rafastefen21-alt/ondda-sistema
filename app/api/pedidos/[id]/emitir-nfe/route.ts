@@ -11,6 +11,7 @@ import {
 } from "@/lib/nfe";
 import { sendNfeEmail } from "@/lib/email";
 import { mergeNotificacoes } from "@/lib/notificacoes";
+import { emitirBoletoPagamento } from "@/lib/cobranca-service";
 
 // ─── POST /api/pedidos/[id]/emitir-nfe ───────────────────────────────────────
 // Emite a NF-e do pedido via Focus NF-e.
@@ -316,6 +317,23 @@ export async function GET(
         });
       }),
   );
+
+  // Fallback: se uma NF acabou de ser autorizada e o pedido tem um boleto
+  // pendente sem registro no Itaú, emite o boleto agora com o número da NF.
+  for (const inv of updates) {
+    if (inv.status === "EMITIDA" && inv.number) {
+      try {
+        const pend = await prisma.payment.findFirst({
+          where: { orderId: id, tenantId, method: "BOLETO", status: "PENDENTE", itauNossoNumero: null },
+        });
+        if (pend) {
+          await emitirBoletoPagamento(pend.id, tenantId, { notificar: true, nfNumero: inv.number });
+        }
+      } catch (e) {
+        console.error("[NFE-STATUS] falha ao emitir boleto após NF:", e);
+      }
+    }
+  }
 
   const updatedIds = new Set(updates.map((u) => u.id));
   const final = invoices.map((inv) =>

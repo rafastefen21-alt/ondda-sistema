@@ -275,6 +275,7 @@ export async function emitirBoleto(params: {
   vencimento:  Date;
   nossoNumero: string;
   seuNumero:   string;
+  mensagens?:  string[];   // impressas no boleto (ex.: "Ref. NF-e nº 118")
 }): Promise<ResultadoBoleto> {
   const { credenciais: c, pagador } = params;
 
@@ -342,6 +343,9 @@ export async function emitirBoleto(params: {
           texto_seu_numero:    params.seuNumero.slice(0, 10),
         },
       ],
+      ...(params.mensagens?.length
+        ? { mensagens_cobranca: params.mensagens.slice(0, 4).map((m) => ({ mensagem: m.slice(0, 80) })) }
+        : {}),
     },
   };
 

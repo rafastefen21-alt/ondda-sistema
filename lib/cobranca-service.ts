@@ -17,6 +17,7 @@ import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
 import { emitirBoleto, proximoNossoNumero } from "@/lib/itau";
 import { renderBoletoPdfById } from "@/lib/boleto-pdf";
+import { autoEmitirNfe, aguardarAutorizacaoNfe } from "@/lib/nfe-service";
 
 const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -27,7 +28,7 @@ const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", cur
 export async function emitirBoletoPagamento(
   paymentId: string,
   tenantId: string,
-  opts: { notificar?: boolean } = {},
+  opts: { notificar?: boolean; nfNumero?: string | null } = {},
 ): Promise<{ nossoNumero: string; linhaDigitavel: string | null; codigoBarras: string | null }> {
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, tenantId },
@@ -103,6 +104,7 @@ export async function emitirBoletoPagamento(
     vencimento:  payment.dueDate,
     nossoNumero,
     seuNumero:   payment.orderId.slice(-10).toUpperCase(),
+    mensagens:   opts.nfNumero ? [`Ref. NF-e no ${opts.nfNumero}`] : undefined,
   });
 
   await prisma.payment.update({
@@ -268,6 +270,7 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
           zapiInstanceId: true, zapiToken: true, notificacoes: true,
           itauClientId: true, itauCertificado: true, itauChavePrivada: true,
           itauConta: true, itauContaDac: true, itauClientSecret: true, itauAgencia: true,
+          focusNfeToken: true,
         },
       }),
     ]);
@@ -289,8 +292,7 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       tenant.itauChavePrivada && tenant.itauAgencia && tenant.itauConta && tenant.itauContaDac
     );
     const usaItau = metodo === "BOLETO" && itauPronto;
-
-    if (!usaItau && !tenant.mpAccessToken) return;
+    const vaiCobrar = usaItau || !!tenant.mpAccessToken;
 
     // Vencimento: boleto usa o prazo do cliente; senão, 3 dias
     const dueDate = new Date();
@@ -301,17 +303,34 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       dueDate.setDate(dueDate.getDate() + 3);
     }
 
-    const payment = await prisma.payment.create({
-      data: {
-        tenantId, orderId, amount: total as never,
-        method: metodo as never, dueDate, status: "PENDENTE",
-      },
-    });
+    // Cria o pagamento ANTES da NF-e, para a nota já sair com a forma de pagamento.
+    const payment = vaiCobrar
+      ? await prisma.payment.create({
+          data: {
+            tenantId, orderId, amount: total as never,
+            method: metodo as never, dueDate, status: "PENDENTE",
+          },
+        })
+      : null;
+
+    // ── NF-e automática (toda aprovação, se a Focus estiver configurada) ──
+    const nfConfigurada = !!tenant.focusNfeToken;
+    let nfNumero: string | null = null;
+    if (nfConfigurada) {
+      const invoiceId = await autoEmitirNfe(orderId, tenantId);
+      if (invoiceId) nfNumero = await aguardarAutorizacaoNfe(invoiceId, tenantId);
+    }
 
     // ── BOLETO ITAÚ ──
-    if (usaItau) {
+    if (usaItau && payment) {
+      // "Boleto espera a NF": se a NF está configurada mas ainda não autorizou,
+      // não emite o boleto agora — o fallback emite quando a NF autorizar.
+      if (nfConfigurada && !nfNumero) {
+        console.log("[COBRANCA-AUTO] boleto aguardando autorização da NF-e:", orderId);
+        return;
+      }
       try {
-        await emitirBoletoPagamento(payment.id, tenantId, { notificar: true });
+        await emitirBoletoPagamento(payment.id, tenantId, { notificar: true, nfNumero });
         console.log("[COBRANCA-AUTO] boleto Itaú gerado para pedido", orderId);
       } catch (err) {
         console.error("[COBRANCA-AUTO] boleto Itaú falhou (pagamento fica pendente):", err);
@@ -320,7 +339,7 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
     }
 
     // ── MERCADO PAGO (PIX/cartão) ──
-    if (!tenant.mpAccessToken) return;
+    if (!tenant.mpAccessToken || !payment) return;
 
     const mpClient = new MercadoPagoConfig({ accessToken: tenant.mpAccessToken });
     const preferenceApi = new Preference(mpClient);
