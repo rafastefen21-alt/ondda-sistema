@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Users, ShoppingBag } from "lucide-react";
+import { Plus, Users, ShoppingBag, Download } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,12 +32,22 @@ export default async function ClientesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
           <p className="text-gray-500">{clients.length} cliente(s) cadastrado(s)</p>
         </div>
-        <Link href="/clientes/novo">
-          <Button>
-            <Plus className="h-4 w-4" />
-            Novo Cliente
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {clients.length > 0 && (
+            <a href="/api/clientes/exportar">
+              <Button variant="outline">
+                <Download className="h-4 w-4" />
+                Exportar Excel
+              </Button>
+            </a>
+          )}
+          <Link href="/clientes/novo">
+            <Button>
+              <Plus className="h-4 w-4" />
+              Novo Cliente
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {clients.length > 0 ? (
