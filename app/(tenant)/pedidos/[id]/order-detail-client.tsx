@@ -298,32 +298,6 @@ export function OrderDetailClient({
     setBoletoVencimento(d.toISOString().slice(0, 10));
   }, []);
 
-  /** Lança boleto como A RECEBER (PENDENTE) com a data de vencimento informada */
-  async function registerAsPending() {
-    setRegisteringPay(true);
-    try {
-      const res = await fetch("/api/pagamentos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId:      order.id,
-          amount:       total,
-          method:       "BOLETO",
-          installments: 1,
-          dueDate:      boletoVencimento,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.error ?? "Erro ao lançar boleto."); return; }
-      setShowManualPay(false);
-      router.refresh();
-    } catch {
-      alert("Erro de conexão.");
-    } finally {
-      setRegisteringPay(false);
-    }
-  }
-
   /** Cria um pagamento manual já marcado como PAGO */
   async function registerAsPaid() {
     setRegisteringPay(true);
@@ -974,35 +948,6 @@ export function OrderDetailClient({
                         </select>
                       </div>
 
-                      {/* Campo de vencimento — visível apenas para Boleto */}
-                      {chargeMethod === "BOLETO" && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-gray-600">
-                            Vencimento do boleto
-                          </label>
-                          <input
-                            type="date"
-                            value={boletoVencimento}
-                            onChange={(e) => setBoletoVencimento(e.target.value)}
-                            className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-1"
-                          />
-                        </div>
-                      )}
-
-                      {/* Botão: Lançar como A Receber (Boleto pendente) */}
-                      {chargeMethod === "BOLETO" && (
-                        <button
-                          onClick={registerAsPending}
-                          disabled={registeringPay || !boletoVencimento}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-50 py-2.5 text-sm font-semibold text-yellow-800 transition hover:bg-yellow-100 disabled:opacity-50"
-                        >
-                          {registeringPay
-                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-yellow-700 border-t-transparent" />
-                            : <span className="text-base leading-none">$</span>}
-                          {registeringPay ? "Lançando..." : `Lançar como A Receber (vence ${boletoVencimento ? new Date(boletoVencimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"})`}
-                        </button>
-                      )}
-
                       {/* Botão: Registrar como Pago */}
                       <button
                         onClick={() => setShowManualPay(true)}
@@ -1056,7 +1001,11 @@ export function OrderDetailClient({
                         ) : (
                           <ExternalLink className="h-4 w-4" />
                         )}
-                        {generatingCharge ? "Gerando cobrança..." : "Cobrar via Mercado Pago"}
+                        {generatingCharge
+                          ? "Gerando cobrança..."
+                          : chargeMethod === "BOLETO"
+                          ? "Gerar boleto Itaú"
+                          : "Cobrar via Mercado Pago"}
                       </button>
                     </div>
                   ) : (

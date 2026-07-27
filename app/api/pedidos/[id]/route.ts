@@ -265,9 +265,11 @@ export async function PATCH(
     } catch (err) {
       console.error("[STOCK] erro ao descontar estoque:", err);
     }
-    // Gera cobrança automaticamente (fire-and-forget)
-    autoGerarCobranca(id, session.user.tenantId)
-      .catch((err) => console.error("[COBRANCA-AUTO] falha:", err));
+    // Gera cobrança automaticamente ao aprovar (BOLETO Itaú ou link MP).
+    // Precisa ser AWAITED: em serverless (Vercel) uma tarefa "fire-and-forget"
+    // é descartada quando a função responde, antes de concluir.
+    // autoGerarCobranca nunca lança (trata os próprios erros internamente).
+    await autoGerarCobranca(id, session.user.tenantId);
   }
   if (
     parsed.data.status === "CANCELADO" &&
