@@ -1,12 +1,13 @@
 /**
- * Gera cobrança automaticamente ao aprovar um pedido.
- * Chamado pelo PATCH /api/pedidos/[id] quando status → APROVADO.
+ * Cobrança automática e emissão de boleto Itaú.
  *
- * - Forma de pagamento BOLETO + Itaú configurado → emite boleto registrado no
- *   Itaú e envia o PDF por e-mail ao cliente.
- * - Demais formas (PIX/cartão) → gera link do Mercado Pago (como antes).
+ * - autoGerarCobranca: chamado ao aprovar o pedido. BOLETO+Itaú → emite boleto
+ *   e envia por e-mail; PIX/cartão → link do Mercado Pago.
+ * - emitirBoletoPagamento: emite o boleto Itaú para um pagamento JÁ existente
+ *   (usado pelo botão "Gerar boleto Itaú" e reutilizado pelo fluxo automático).
  *
- * Nunca lança exceção — falha silenciosa com log.
+ * Nunca lança em autoGerarCobranca (falha silenciosa). emitirBoletoPagamento
+ * lança para a rota reportar o erro ao operador.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,135 @@ import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
 import { emitirBoleto, proximoNossoNumero } from "@/lib/itau";
 import { renderBoletoPdfById } from "@/lib/boleto-pdf";
+
+const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/**
+ * Emite o boleto Itaú para um pagamento existente e (opcionalmente) notifica o
+ * cliente por e-mail (PDF anexado) e WhatsApp. Lança em caso de erro.
+ */
+export async function emitirBoletoPagamento(
+  paymentId: string,
+  tenantId: string,
+  opts: { notificar?: boolean } = {},
+): Promise<{ nossoNumero: string; linhaDigitavel: string | null; codigoBarras: string | null }> {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, tenantId },
+    include: {
+      order: {
+        include: {
+          client: {
+            select: {
+              name: true, email: true, decisorEmail: true, nomeFantasia: true,
+              phone: true, decisorPhone: true,
+              cnpj: true, cpf: true, logradouro: true, numero: true, complemento: true,
+              bairro: true, city: true, state: true, cep: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!payment) throw new Error("Pagamento não encontrado.");
+  if (payment.status === "PAGO") throw new Error("Este pagamento já está quitado.");
+  if (payment.itauNossoNumero) throw new Error("Este pagamento já tem boleto Itaú gerado.");
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      name: true, cnpj: true, emailRemetente: true,
+      zapiInstanceId: true, zapiToken: true, notificacoes: true,
+      itauClientId: true, itauClientSecret: true, itauCertificado: true,
+      itauChavePrivada: true, itauAgencia: true, itauConta: true,
+      itauContaDac: true, itauAmbiente: true,
+    },
+  });
+  const itauPronto = !!(
+    tenant?.itauClientId && tenant.itauClientSecret && tenant.itauCertificado &&
+    tenant.itauChavePrivada && tenant.itauAgencia && tenant.itauConta && tenant.itauContaDac
+  );
+  if (!tenant || !itauPronto) {
+    throw new Error("Itaú não configurado. Preencha as credenciais em Configurações → Integrações.");
+  }
+
+  const client = payment.order.client;
+  const total = Number(payment.amount);
+  const nossoNumero = await proximoNossoNumero(tenantId);
+
+  const boleto = await emitirBoleto({
+    tenantId,
+    credenciais: {
+      clientId:     tenant.itauClientId!,
+      clientSecret: tenant.itauClientSecret!,
+      certificado:  tenant.itauCertificado!,
+      chavePrivada: tenant.itauChavePrivada!,
+      agencia:      tenant.itauAgencia!,
+      conta:        tenant.itauConta!,
+      contaDac:     tenant.itauContaDac!,
+      ambiente:     tenant.itauAmbiente ?? "Validacao",
+    },
+    nomeBeneficiario: tenant.name,
+    cnpjBeneficiario: tenant.cnpj,
+    pagador: {
+      nome:        client.name ?? client.email,
+      cnpj:        client.cnpj,
+      cpf:         client.cpf,
+      logradouro:  client.logradouro,
+      numero:      client.numero,
+      complemento: client.complemento,
+      bairro:      client.bairro,
+      cidade:      client.city,
+      uf:          client.state,
+      cep:         client.cep,
+      email:       client.email,
+    },
+    valor:       total,
+    vencimento:  payment.dueDate,
+    nossoNumero,
+    seuNumero:   payment.orderId.slice(-10).toUpperCase(),
+  });
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      itauNossoNumero: boleto.nossoNumero,
+      itauIdBoleto:    boleto.idBoleto,
+      linhaDigitavel:  boleto.linhaDigitavel,
+      codigoBarras:    boleto.codigoBarras,
+    },
+  });
+
+  if (opts.notificar && boleto.linhaDigitavel) {
+    const notif = mergeNotificacoes(tenant.notificacoes);
+    const clientName = client.nomeFantasia ?? client.name ?? client.email;
+    const shortId = payment.orderId.slice(-8).toUpperCase();
+    const recipients = [...new Set(
+      [client.decisorEmail, client.email].filter(Boolean) as string[],
+    )];
+    const phone = client.phone ?? client.decisorPhone ?? null;
+
+    if (notif.email.cobrancaGerada && recipients.length) {
+      const pdf = await renderBoletoPdfById(payment.id, tenantId);
+      if (pdf) {
+        await sendBoletoEmail({
+          to: recipients, tenantName: tenant.name, clientName, orderId: payment.orderId,
+          total, linhaDigitavel: boleto.linhaDigitavel, pdf, dueDate: payment.dueDate,
+          fromOverride: tenant.emailRemetente,
+        });
+      }
+    }
+
+    if (notif.whatsapp.cobrancaGerada && tenant.zapiInstanceId && tenant.zapiToken && phone) {
+      const msg = renderNotifMessage(notif.mensagens.cobrancaGerada, {
+        nome: clientName, pedido: shortId, valor: fmtBrl(total),
+      }) + `\n\nBoleto (linha digitável):\n${boleto.linhaDigitavel}`;
+      zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg)
+        .catch((e) => console.error("[BOLETO] WA error:", e));
+    }
+  }
+
+  return boleto;
+}
 
 export async function autoGerarCobranca(orderId: string, tenantId: string): Promise<void> {
   try {
@@ -27,30 +157,24 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
             select: {
               name: true, email: true, decisorEmail: true, nomeFantasia: true,
               phone: true, decisorPhone: true, prazoBoletoDias: true,
-              cnpj: true, cpf: true, logradouro: true, numero: true, complemento: true,
-              bairro: true, city: true, state: true, cep: true,
             },
           },
           items: { include: { product: { select: { name: true } } } },
-          // Não gera segunda cobrança se já tiver payment pendente ou pago
           payments: { where: { status: { in: ["PENDENTE", "PAGO"] } } },
         },
       }),
       prisma.tenant.findUnique({
         where: { id: tenantId },
         select: {
-          name: true, cnpj: true, mpAccessToken: true, emailRemetente: true,
+          name: true, mpAccessToken: true, emailRemetente: true,
           zapiInstanceId: true, zapiToken: true, notificacoes: true,
-          itauClientId: true, itauClientSecret: true, itauCertificado: true,
-          itauChavePrivada: true, itauAgencia: true, itauConta: true,
-          itauContaDac: true, itauAmbiente: true,
+          itauClientId: true, itauCertificado: true, itauChavePrivada: true,
+          itauConta: true, itauContaDac: true, itauClientSecret: true, itauAgencia: true,
         },
       }),
     ]);
 
     if (!order || !tenant) return;
-
-    // Já tem cobrança ativa
     if (order.payments.length > 0) {
       console.log("[COBRANCA-AUTO] já existe cobrança para pedido", orderId);
       return;
@@ -68,7 +192,6 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
     );
     const usaItau = metodo === "BOLETO" && itauPronto;
 
-    // Nada a cobrar automaticamente (sem Itaú para boleto e sem MP)
     if (!usaItau && !tenant.mpAccessToken) return;
 
     // Vencimento: boleto usa o prazo do cliente; senão, 3 dias
@@ -82,92 +205,15 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
 
     const payment = await prisma.payment.create({
       data: {
-        tenantId,
-        orderId,
-        amount: total as never,
-        method: metodo as never,
-        dueDate,
-        status: "PENDENTE",
+        tenantId, orderId, amount: total as never,
+        method: metodo as never, dueDate, status: "PENDENTE",
       },
     });
 
-    const notif = mergeNotificacoes(tenant.notificacoes);
-    const clientName = order.client.nomeFantasia ?? order.client.name ?? order.client.email;
-    const shortId = orderId.slice(-8).toUpperCase();
-    const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    const recipients = [...new Set(
-      [order.client.decisorEmail, order.client.email].filter(Boolean) as string[],
-    )];
-    const phone = order.client.phone ?? order.client.decisorPhone ?? null;
-
-    // ── BOLETO ITAÚ ────────────────────────────────────────────────────────────
+    // ── BOLETO ITAÚ ──
     if (usaItau) {
       try {
-        const nossoNumero = await proximoNossoNumero(tenantId);
-        const boleto = await emitirBoleto({
-          tenantId,
-          credenciais: {
-            clientId:     tenant.itauClientId!,
-            clientSecret: tenant.itauClientSecret!,
-            certificado:  tenant.itauCertificado!,
-            chavePrivada: tenant.itauChavePrivada!,
-            agencia:      tenant.itauAgencia!,
-            conta:        tenant.itauConta!,
-            contaDac:     tenant.itauContaDac!,
-            ambiente:     tenant.itauAmbiente ?? "Validacao",
-          },
-          nomeBeneficiario: tenant.name,
-          cnpjBeneficiario: tenant.cnpj,
-          pagador: {
-            nome:        order.client.name ?? order.client.email,
-            cnpj:        order.client.cnpj,
-            cpf:         order.client.cpf,
-            logradouro:  order.client.logradouro,
-            numero:      order.client.numero,
-            complemento: order.client.complemento,
-            bairro:      order.client.bairro,
-            cidade:      order.client.city,
-            uf:          order.client.state,
-            cep:         order.client.cep,
-            email:       order.client.email,
-          },
-          valor:       total,
-          vencimento:  dueDate,
-          nossoNumero,
-          seuNumero:   orderId.slice(-10).toUpperCase(),
-        });
-
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            itauNossoNumero: boleto.nossoNumero,
-            itauIdBoleto:    boleto.idBoleto,
-            linhaDigitavel:  boleto.linhaDigitavel,
-            codigoBarras:    boleto.codigoBarras,
-          },
-        });
-
-        // E-mail com o PDF anexado
-        if (notif.email.cobrancaGerada && recipients.length && boleto.linhaDigitavel) {
-          const pdf = await renderBoletoPdfById(payment.id, tenantId);
-          if (pdf) {
-            await sendBoletoEmail({
-              to: recipients, tenantName: tenant.name, clientName, orderId, total,
-              linhaDigitavel: boleto.linhaDigitavel, pdf, dueDate,
-              fromOverride: tenant.emailRemetente,
-            });
-          }
-        }
-
-        // WhatsApp (opcional) com a linha digitável
-        if (notif.whatsapp.cobrancaGerada && tenant.zapiInstanceId && tenant.zapiToken && phone && boleto.linhaDigitavel) {
-          const msg = renderNotifMessage(notif.mensagens.cobrancaGerada, {
-            nome: clientName, pedido: shortId, valor: fmtBrl(total),
-          }) + `\n\nBoleto (linha digitável):\n${boleto.linhaDigitavel}`;
-          zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg)
-            .catch((e) => console.error("[COBRANCA-AUTO] WA error:", e));
-        }
-
+        await emitirBoletoPagamento(payment.id, tenantId, { notificar: true });
         console.log("[COBRANCA-AUTO] boleto Itaú gerado para pedido", orderId);
       } catch (err) {
         console.error("[COBRANCA-AUTO] boleto Itaú falhou (pagamento fica pendente):", err);
@@ -175,7 +221,7 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
       return;
     }
 
-    // ── MERCADO PAGO (PIX/cartão) ───────────────────────────────────────────────
+    // ── MERCADO PAGO (PIX/cartão) ──
     if (!tenant.mpAccessToken) return;
 
     const mpClient = new MercadoPagoConfig({ accessToken: tenant.mpAccessToken });
@@ -203,17 +249,21 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
     });
 
     const checkoutUrl = preference.sandbox_init_point ?? preference.init_point ?? null;
-
     if (checkoutUrl) {
-      // E-mail
+      const notif = mergeNotificacoes(tenant.notificacoes);
+      const clientName = order.client.nomeFantasia ?? order.client.name ?? order.client.email;
+      const shortId = orderId.slice(-8).toUpperCase();
+      const recipients = [...new Set(
+        [order.client.decisorEmail, order.client.email].filter(Boolean) as string[],
+      )];
+      const phone = order.client.phone ?? order.client.decisorPhone ?? null;
+
       if (notif.email.cobrancaGerada && recipients.length) {
         await sendCobrancaEmail(
           recipients, tenant.name, clientName, orderId, total,
           checkoutUrl, dueDate, tenant.emailRemetente,
         );
       }
-
-      // WhatsApp
       if (notif.whatsapp.cobrancaGerada && tenant.zapiInstanceId && tenant.zapiToken && phone) {
         const msg = renderNotifMessage(notif.mensagens.cobrancaGerada, {
           nome: clientName, pedido: shortId, valor: fmtBrl(total),
@@ -221,7 +271,6 @@ export async function autoGerarCobranca(orderId: string, tenantId: string): Prom
         zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg)
           .catch((e) => console.error("[COBRANCA-AUTO] WA error:", e));
       }
-
       console.log("[COBRANCA-AUTO] cobrança MP gerada para pedido", orderId);
     }
   } catch (err) {

@@ -139,12 +139,14 @@ interface OrderDetailClientProps {
   order: Order;
   role: string;
   showPrice: boolean;
+  itauConfigured: boolean;
 }
 
 export function OrderDetailClient({
   order,
   role,
   showPrice,
+  itauConfigured,
 }: OrderDetailClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -197,6 +199,28 @@ export function OrderDetailClient({
     order.paymentMethod ?? "PIX"
   );
   const [generatingCharge, setGeneratingCharge] = useState(false);
+  const [emitindoBoleto, setEmitindoBoleto] = useState<string | null>(null);
+
+  // Emite o boleto Itaú para um pagamento já existente e envia por e-mail
+  async function emitirBoletoItau(paymentId: string) {
+    setEmitindoBoleto(paymentId);
+    try {
+      const res  = await fetch(`/api/pagamentos/${paymentId}/emitir-boleto`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Erro ao emitir boleto.");
+        return;
+      }
+      router.refresh();
+      if (data.linhaDigitavel) {
+        alert(`Boleto Itaú gerado e enviado ao cliente!\n\nLinha digitável:\n${data.linhaDigitavel}`);
+      }
+    } catch {
+      alert("Erro de conexão ao emitir boleto.");
+    } finally {
+      setEmitindoBoleto(null);
+    }
+  }
 
   async function generateCharge() {
     setGeneratingCharge(true);
@@ -775,7 +799,7 @@ export function OrderDetailClient({
                                 {p.status}
                               </span>
                             </div>
-                            {p.itauNossoNumero && (
+                            {p.itauNossoNumero ? (
                               <a
                                 href={`/api/pagamentos/${p.id}/boleto`}
                                 target="_blank"
@@ -786,6 +810,22 @@ export function OrderDetailClient({
                                 <FileText className="h-3.5 w-3.5" />
                                 Boleto
                               </a>
+                            ) : (
+                              canUseMp && itauConfigured && p.status !== "PAGO" && p.method === "BOLETO" && (
+                                <button
+                                  onClick={() => emitirBoletoItau(p.id)}
+                                  disabled={emitindoBoleto === p.id}
+                                  title="Gerar boleto no Itaú e enviar por e-mail ao cliente"
+                                  className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100 disabled:opacity-50"
+                                >
+                                  {emitindoBoleto === p.id ? (
+                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
+                                  ) : (
+                                    <FileText className="h-3.5 w-3.5" />
+                                  )}
+                                  {emitindoBoleto === p.id ? "Gerando..." : "Gerar boleto Itaú"}
+                                </button>
+                              )
                             )}
                             {canUseMp && p.status !== "PAGO" && (
                               <>

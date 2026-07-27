@@ -46,6 +46,18 @@ export default async function OrderDetailPage({
 
   const showPrice = canSeePrice(role, order.status);
 
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      itauClientId: true, itauClientSecret: true, itauCertificado: true,
+      itauChavePrivada: true, itauAgencia: true, itauConta: true, itauContaDac: true,
+    },
+  });
+  const itauConfigured = !!(
+    tenant?.itauClientId && tenant.itauClientSecret && tenant.itauCertificado &&
+    tenant.itauChavePrivada && tenant.itauAgencia && tenant.itauConta && tenant.itauContaDac
+  );
+
   return (
     <OrderDetailClient
       order={{
@@ -65,6 +77,7 @@ export default async function OrderDetailPage({
       }}
       role={role}
       showPrice={showPrice}
+      itauConfigured={itauConfigured}
     />
   );
 }
