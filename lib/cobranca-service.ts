@@ -147,6 +147,83 @@ export async function emitirBoletoPagamento(
   return boleto;
 }
 
+/**
+ * Reenvia um boleto JÁ gerado ao cliente por e-mail (PDF anexado) e/ou
+ * WhatsApp (linha digitável). Ação manual — não depende da config de
+ * notificações. Retorna quais canais foram usados.
+ */
+export async function reenviarBoletoPagamento(
+  paymentId: string,
+  tenantId: string,
+): Promise<{ email: boolean; whatsapp: boolean }> {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, tenantId },
+    include: {
+      order: {
+        include: {
+          client: {
+            select: {
+              name: true, email: true, decisorEmail: true, nomeFantasia: true,
+              phone: true, decisorPhone: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!payment) throw new Error("Pagamento não encontrado.");
+  if (!payment.itauNossoNumero || !payment.linhaDigitavel) {
+    throw new Error("Este pagamento não tem boleto Itaú gerado.");
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      name: true, emailRemetente: true, zapiInstanceId: true, zapiToken: true,
+    },
+  });
+  if (!tenant) throw new Error("Distribuidora não encontrada.");
+
+  const client = payment.order.client;
+  const clientName = client.nomeFantasia ?? client.name ?? client.email;
+  const total = Number(payment.amount);
+  const recipients = [...new Set(
+    [client.decisorEmail, client.email].filter(Boolean) as string[],
+  )];
+  const phone = client.phone ?? client.decisorPhone ?? null;
+
+  let email = false;
+  let whatsapp = false;
+
+  // E-mail com PDF anexado
+  if (recipients.length) {
+    const pdf = await renderBoletoPdfById(payment.id, tenantId);
+    if (pdf) {
+      await sendBoletoEmail({
+        to: recipients, tenantName: tenant.name, clientName, orderId: payment.orderId,
+        total, linhaDigitavel: payment.linhaDigitavel, pdf, dueDate: payment.dueDate,
+        fromOverride: tenant.emailRemetente,
+      });
+      email = true;
+    }
+  }
+
+  // WhatsApp com a linha digitável
+  if (tenant.zapiInstanceId && tenant.zapiToken && phone) {
+    const shortId = payment.orderId.slice(-8).toUpperCase();
+    const msg =
+      `Olá, ${clientName}! Segue o boleto do pedido #${shortId} — ${fmtBrl(total)}.\n\n` +
+      `Linha digitável:\n${payment.linhaDigitavel}`;
+    await zapiSendText({ instanceId: tenant.zapiInstanceId, token: tenant.zapiToken }, phone, msg);
+    whatsapp = true;
+  }
+
+  if (!email && !whatsapp) {
+    throw new Error("Cliente sem e-mail e sem WhatsApp configurado para envio.");
+  }
+  return { email, whatsapp };
+}
+
 export async function autoGerarCobranca(orderId: string, tenantId: string): Promise<void> {
   try {
     const [order, tenant] = await Promise.all([

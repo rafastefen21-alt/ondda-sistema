@@ -23,6 +23,7 @@ import {
   Ban,
   RefreshCw,
   AlertTriangle,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -200,6 +201,25 @@ export function OrderDetailClient({
   );
   const [generatingCharge, setGeneratingCharge] = useState(false);
   const [emitindoBoleto, setEmitindoBoleto] = useState<string | null>(null);
+  const [reenviandoBoleto, setReenviandoBoleto] = useState<string | null>(null);
+
+  async function reenviarBoleto(paymentId: string) {
+    setReenviandoBoleto(paymentId);
+    try {
+      const res  = await fetch(`/api/pagamentos/${paymentId}/reenviar-boleto`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? "Erro ao reenviar boleto.");
+        return;
+      }
+      const canais = [data.email && "e-mail", data.whatsapp && "WhatsApp"].filter(Boolean).join(" e ");
+      alert(`Boleto reenviado ao cliente por ${canais}.`);
+    } catch {
+      alert("Erro de conexão ao reenviar boleto.");
+    } finally {
+      setReenviandoBoleto(null);
+    }
+  }
 
   // Emite o boleto Itaú para um pagamento já existente e envia por e-mail
   async function emitirBoletoItau(paymentId: string) {
@@ -800,16 +820,33 @@ export function OrderDetailClient({
                               </span>
                             </div>
                             {p.itauNossoNumero ? (
-                              <a
-                                href={`/api/pagamentos/${p.id}/boleto`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Baixar boleto Itaú (PDF)"
-                                className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100"
-                              >
-                                <FileText className="h-3.5 w-3.5" />
-                                Boleto
-                              </a>
+                              <>
+                                <a
+                                  href={`/api/pagamentos/${p.id}/boleto`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Baixar boleto Itaú (PDF)"
+                                  className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100"
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                  Boleto
+                                </a>
+                                {canUseMp && (
+                                  <button
+                                    onClick={() => reenviarBoleto(p.id)}
+                                    disabled={reenviandoBoleto === p.id}
+                                    title="Reenviar boleto ao cliente por e-mail/WhatsApp"
+                                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    {reenviandoBoleto === p.id ? (
+                                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                                    ) : (
+                                      <Send className="h-3.5 w-3.5" />
+                                    )}
+                                    {reenviandoBoleto === p.id ? "Enviando..." : "Reenviar"}
+                                  </button>
+                                )}
+                              </>
                             ) : (
                               canUseMp && itauConfigured && p.status !== "PAGO" && p.method === "BOLETO" && (
                                 <button
