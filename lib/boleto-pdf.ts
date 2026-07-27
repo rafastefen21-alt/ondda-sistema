@@ -14,7 +14,7 @@ import { montarIdBeneficiario, ITAU_CARTEIRA } from "@/lib/itau";
 import type { Prisma } from "@/app/generated/prisma/client";
 
 const INCLUDE = {
-  order: { include: { client: true } },
+  order: { include: { client: true, invoices: true } },
   tenant: true,
 } as const;
 
@@ -76,6 +76,7 @@ export function renderBoletoPdf(pagamento: PagamentoBoleto): Promise<Buffer> {
     [c.logradouro, c.numero].filter(Boolean).join(", "),
     c.bairro, [c.city, c.state].filter(Boolean).join("/"), c.cep,
   ].filter(Boolean).join(" - ");
+  const nf = pagamento.order.invoices.find((i) => i.status === "EMITIDA" && i.number);
 
   const doc = React.createElement(
     Document, {},
@@ -108,7 +109,8 @@ export function renderBoletoPdf(pagamento: PagamentoBoleto): Promise<Buffer> {
           Cel({ label: "Valor do Documento", value: brl(valor), flex: 1, bold: true, last: true }),
         ),
         React.createElement(View, { style: [styles.row, { borderBottomWidth: 0 }] },
-          Cel({ label: "Nº do Pedido", value: `#${pagamento.orderId.slice(-6).toUpperCase()}`, flex: 1, last: true }),
+          Cel({ label: "Nº do Pedido", value: `#${pagamento.orderId.slice(-6).toUpperCase()}`, flex: 1 }),
+          Cel({ label: "Ref. NF-e", value: nf?.number ? `nº ${nf.number}` : "—", flex: 1, last: true }),
         ),
       ),
       React.createElement(View, { style: styles.corte }),

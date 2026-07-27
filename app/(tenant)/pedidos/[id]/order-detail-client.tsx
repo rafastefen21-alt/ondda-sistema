@@ -200,6 +200,9 @@ export function OrderDetailClient({
   const canUseMp  = ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(role);
   const canUseNfe = ["TENANT_ADMIN", "SUPER_ADMIN", "GERENTE"].includes(role);
 
+  // Número da NF-e autorizada do pedido (para referência no boleto)
+  const nfNumeroPedido = order.invoices.find((i) => i.status === "EMITIDA" && i.number)?.number;
+
   const [chargeMethod, setChargeMethod] = useState(
     order.paymentMethod ?? "PIX"
   );
@@ -892,6 +895,12 @@ export function OrderDetailClient({
                         {/* Status de envio do boleto ao cliente */}
                         {p.itauNossoNumero && (
                           <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                            {nfNumeroPedido && (
+                              <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                <FileText className="h-3 w-3" />
+                                Ref. NF-e nº {nfNumeroPedido}
+                              </span>
+                            )}
                             <span className="text-xs font-medium text-gray-500">Envio ao cliente:</span>
                             <span
                               className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
