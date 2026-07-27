@@ -251,6 +251,12 @@ export interface ResultadoBoleto {
 
 const soDigitos = (v?: string | null) => (v ?? "").replace(/\D/g, "");
 
+/** Formata valor no padrão Itaú: 15 dígitos inteiros + ponto + 2 decimais. */
+function valorItau(n: number): string {
+  const [inteiro, dec] = n.toFixed(2).split(".");
+  return `${inteiro.padStart(15, "0")}.${dec}`;
+}
+
 /**
  * Registra um boleto no Itaú (carteira 109).
  *
@@ -305,10 +311,10 @@ export async function emitirBoleto(params: {
       descricao_instrumento_cobranca: "boleto",
       tipo_boleto:     "a vista",
       codigo_carteira: ITAU_CARTEIRA,
-      valor_total_titulo: params.valor.toFixed(2),
       codigo_especie:  "01",             // Duplicata Mercantil
       descricao_especie: "Duplicata de Venda Mercantil",
       codigo_aceite:   "N",
+      desconto_expresso: false,
       data_emissao:    new Date().toISOString().slice(0, 10),
       pagador: {
         pessoa: {
@@ -330,7 +336,7 @@ export async function emitirBoleto(params: {
         {
           numero_nosso_numero: params.nossoNumero,
           data_vencimento:     params.vencimento.toISOString().slice(0, 10),
-          valor_titulo:        params.valor.toFixed(2),
+          valor_titulo:        valorItau(params.valor),
           texto_seu_numero:    params.seuNumero.slice(0, 10),
         },
       ],
