@@ -221,21 +221,27 @@ export function OrderDetailClient({
     }
   }
 
-  // Emite o boleto Itaú para um pagamento já existente e envia por e-mail
+  // Emite o boleto Itaú para um pagamento já existente, envia por e-mail e
+  // abre o PDF para impressão.
   async function emitirBoletoItau(paymentId: string) {
     setEmitindoBoleto(paymentId);
+    // Abre a aba já no clique (evita bloqueio de pop-up); a URL é definida depois.
+    const janela = window.open("", "_blank");
     try {
       const res  = await fetch(`/api/pagamentos/${paymentId}/emitir-boleto`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
+        janela?.close();
         alert(data.error ?? "Erro ao emitir boleto.");
         return;
       }
       router.refresh();
-      if (data.linhaDigitavel) {
-        alert(`Boleto Itaú gerado e enviado ao cliente!\n\nLinha digitável:\n${data.linhaDigitavel}`);
-      }
+      // Abre o PDF do boleto para impressão
+      const pdfUrl = `/api/pagamentos/${paymentId}/boleto`;
+      if (janela) janela.location.href = pdfUrl;
+      else window.open(pdfUrl, "_blank");
     } catch {
+      janela?.close();
       alert("Erro de conexão ao emitir boleto.");
     } finally {
       setEmitindoBoleto(null);
@@ -244,6 +250,8 @@ export function OrderDetailClient({
 
   async function generateCharge() {
     setGeneratingCharge(true);
+    // Se for boleto, já reserva a aba do PDF no clique (evita bloqueio de pop-up)
+    const janela = chargeMethod === "BOLETO" ? window.open("", "_blank") : null;
     try {
       const res = await fetch(`/api/pedidos/${order.id}/cobrar`, {
         method: "POST",
@@ -252,6 +260,7 @@ export function OrderDetailClient({
       });
       const data = await res.json();
       if (!res.ok) {
+        janela?.close();
         alert(data.itauError ?? data.error ?? "Erro ao gerar cobrança.");
         return;
       }
@@ -259,11 +268,16 @@ export function OrderDetailClient({
       if (data.checkoutUrl) {
         setMpLinks((prev) => ({ ...prev, [data.paymentId]: data.checkoutUrl }));
       }
-      if (data.boleto?.linhaDigitavel) {
-        const teste = data.boleto.ambiente !== "Efetivacao" ? "\n\n(Ambiente de VALIDAÇÃO — boleto de teste)" : "";
-        alert(`Boleto Itaú gerado!\n\nLinha digitável:\n${data.boleto.linhaDigitavel}${teste}`);
+      if (data.boleto?.linhaDigitavel && data.paymentId) {
+        // Abre o PDF do boleto para impressão
+        const pdfUrl = `/api/pagamentos/${data.paymentId}/boleto`;
+        if (janela) janela.location.href = pdfUrl;
+        else window.open(pdfUrl, "_blank");
+      } else {
+        janela?.close();
       }
     } catch {
+      janela?.close();
       alert("Erro de conexão ao gerar cobrança.");
     } finally {
       setGeneratingCharge(false);
@@ -825,11 +839,11 @@ export function OrderDetailClient({
                                   href={`/api/pagamentos/${p.id}/boleto`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  title="Baixar boleto Itaú (PDF)"
+                                  title="Abrir boleto (PDF) para imprimir ou baixar"
                                   className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100"
                                 >
                                   <FileText className="h-3.5 w-3.5" />
-                                  Boleto
+                                  Imprimir boleto
                                 </a>
                                 {canUseMp && (
                                   <button
