@@ -251,10 +251,12 @@ export interface ResultadoBoleto {
 
 const soDigitos = (v?: string | null) => (v ?? "").replace(/\D/g, "");
 
-/** Formata valor no padrão Itaú: 15 dígitos inteiros + ponto + 2 decimais. */
+/**
+ * Formata valor no padrão do request de emissão do Itaú: centavos, sem ponto,
+ * zero-preenchido em 17 dígitos. Ex.: 64.50 → "00000000000006450".
+ */
 function valorItau(n: number): string {
-  const [inteiro, dec] = n.toFixed(2).split(".");
-  return `${inteiro.padStart(15, "0")}.${dec}`;
+  return String(Math.round(n * 100)).padStart(17, "0");
 }
 
 /**
