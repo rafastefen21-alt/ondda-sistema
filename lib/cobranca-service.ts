@@ -15,7 +15,7 @@ import { MercadoPagoConfig, Preference } from "mercadopago";
 import { sendCobrancaEmail, sendBoletoEmail } from "@/lib/email";
 import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
-import { emitirBoleto, proximoNossoNumero } from "@/lib/itau";
+import { emitirBoleto, proximoNossoNumero, baixarBoleto } from "@/lib/itau";
 import { renderBoletoPdfById } from "@/lib/boleto-pdf";
 import { autoEmitirNfe, aguardarAutorizacaoNfe } from "@/lib/nfe-service";
 
@@ -171,6 +171,71 @@ export async function emitirBoletoPagamento(
   }
 
   return boleto;
+}
+
+/**
+ * Reemite o boleto: baixa o atual no Itaú (em produção) e gera um novo com a
+ * data de vencimento informada. Usado para corrigir a data de um boleto já
+ * emitido. Retorna os dados do novo boleto.
+ */
+export async function reemitirBoletoPagamento(
+  paymentId: string,
+  tenantId: string,
+  opts: { vencimento?: string | null } = {},
+): Promise<{ nossoNumero: string; linhaDigitavel: string | null; codigoBarras: string | null }> {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, tenantId },
+    select: { itauNossoNumero: true, itauIdBoleto: true, orderId: true, status: true },
+  });
+  if (!payment) throw new Error("Pagamento não encontrado.");
+  if (payment.status === "PAGO") throw new Error("Este pagamento já está quitado.");
+
+  // Baixa o boleto atual no Itaú (best-effort; só faz sentido em produção).
+  if (payment.itauNossoNumero) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        itauClientId: true, itauClientSecret: true, itauCertificado: true,
+        itauChavePrivada: true, itauAgencia: true, itauConta: true,
+        itauContaDac: true, itauAmbiente: true,
+      },
+    });
+    const pronto = !!(
+      tenant?.itauClientId && tenant.itauClientSecret && tenant.itauCertificado &&
+      tenant.itauChavePrivada && tenant.itauAgencia && tenant.itauConta && tenant.itauContaDac
+    );
+    if (pronto && payment.itauIdBoleto && tenant!.itauAmbiente === "Efetivacao") {
+      try {
+        await baixarBoleto(payment.itauIdBoleto, tenantId, {
+          clientId: tenant!.itauClientId!, clientSecret: tenant!.itauClientSecret!,
+          certificado: tenant!.itauCertificado!, chavePrivada: tenant!.itauChavePrivada!,
+          agencia: tenant!.itauAgencia!, conta: tenant!.itauConta!,
+          contaDac: tenant!.itauContaDac!, ambiente: tenant!.itauAmbiente ?? "Validacao",
+        });
+      } catch (e) {
+        console.error("[REEMISSAO] falha ao baixar boleto anterior (segue a reemissão):", e);
+      }
+    }
+
+    // Limpa os dados do boleto antigo para permitir a nova emissão.
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        itauNossoNumero: null, itauIdBoleto: null, linhaDigitavel: null,
+        codigoBarras: null, boletoEmailEnviadoEm: null, boletoWhatsappEnviadoEm: null,
+      },
+    });
+  }
+
+  // Número da NF autorizada do pedido (para reimprimir no novo boleto).
+  const nf = await prisma.invoice.findFirst({
+    where: { orderId: payment.orderId, tenantId, status: "EMITIDA", number: { not: null } },
+    select: { number: true },
+  });
+
+  return emitirBoletoPagamento(paymentId, tenantId, {
+    notificar: true, vencimento: opts.vencimento, nfNumero: nf?.number ?? null,
+  });
 }
 
 /**

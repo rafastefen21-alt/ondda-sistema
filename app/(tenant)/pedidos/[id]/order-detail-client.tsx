@@ -209,9 +209,39 @@ export function OrderDetailClient({
   const [generatingCharge, setGeneratingCharge] = useState(false);
   const [emitindoBoleto, setEmitindoBoleto] = useState<string | null>(null);
   const [reenviandoBoleto, setReenviandoBoleto] = useState<string | null>(null);
+  const [reemitindoBoleto, setReemitindoBoleto] = useState<string | null>(null);
   // Vencimento editável por pagamento (default = vencimento já do pagamento)
   const [boletoVenc, setBoletoVenc] = useState<Record<string, string>>({});
   const isoDate = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
+
+  // Reemite o boleto (baixa o atual e gera um novo) com o vencimento informado
+  async function reemitirBoleto(paymentId: string, vencimento: string) {
+    if (!confirm("Reemitir o boleto? O boleto atual será baixado e um novo será gerado com o vencimento escolhido.")) return;
+    setReemitindoBoleto(paymentId);
+    const janela = window.open("", "_blank");
+    try {
+      const res  = await fetch(`/api/pagamentos/${paymentId}/reemitir-boleto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vencimento }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        janela?.close();
+        alert(data.error ?? "Erro ao reemitir boleto.");
+        return;
+      }
+      router.refresh();
+      const pdfUrl = `/api/pagamentos/${paymentId}/boleto`;
+      if (janela) janela.location.href = pdfUrl;
+      else window.open(pdfUrl, "_blank");
+    } catch {
+      janela?.close();
+      alert("Erro de conexão ao reemitir boleto.");
+    } finally {
+      setReemitindoBoleto(null);
+    }
+  }
 
   async function reenviarBoleto(paymentId: string) {
     setReenviandoBoleto(paymentId);
@@ -847,6 +877,31 @@ export function OrderDetailClient({
                                     )}
                                     {reenviandoBoleto === p.id ? "Enviando..." : "Reenviar"}
                                   </button>
+                                )}
+                                {canUseMp && p.status !== "PAGO" && (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="date"
+                                      value={boletoVenc[p.id] ?? isoDate(p.dueDate)}
+                                      min={isoDate(new Date())}
+                                      onChange={(e) => setBoletoVenc((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                                      title="Novo vencimento para a reemissão"
+                                      className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                    />
+                                    <button
+                                      onClick={() => reemitirBoleto(p.id, boletoVenc[p.id] ?? isoDate(p.dueDate))}
+                                      disabled={reemitindoBoleto === p.id}
+                                      title="Baixar o boleto atual e gerar um novo com esse vencimento"
+                                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                                    >
+                                      {reemitindoBoleto === p.id ? (
+                                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                                      ) : (
+                                        <RefreshCw className="h-3.5 w-3.5" />
+                                      )}
+                                      {reemitindoBoleto === p.id ? "Reemitindo..." : "Reemitir"}
+                                    </button>
+                                  </div>
                                 )}
                               </>
                             ) : (

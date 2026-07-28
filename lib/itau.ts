@@ -469,6 +469,28 @@ export async function consultarWebhookItau(params: {
   );
 }
 
+/** Baixa (cancela) um boleto registrado no Itaú, pelo id do boleto. */
+export async function baixarBoleto(
+  idBoleto: string,
+  tenantId: string,
+  c: CredenciaisItau,
+): Promise<{ status: number; data: unknown }> {
+  const token = await obterAccessToken(tenantId, c);
+  return requisicaoMtls(
+    `${ITAU_URLS.boletos}/${encodeURIComponent(idBoleto)}/baixa`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization:          `Bearer ${token}`,
+        "x-itau-apikey":        c.clientId,
+        "x-itau-correlationID": randomUUID(),
+      },
+    },
+    c.certificado,
+    c.chavePrivada,
+  );
+}
+
 /** Extrai a mensagem de erro do formato de resposta do Itaú. */
 function extrairErro(data: unknown): string {
   const d = data as {
