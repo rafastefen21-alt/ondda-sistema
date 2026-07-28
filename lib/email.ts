@@ -378,14 +378,19 @@ export async function sendBoletoEmail(params: {
   if (recipients.length === 0) return false;
   const shortId = params.orderId.slice(-8).toUpperCase();
   try {
-    await getResend().emails.send({
+    // O SDK do Resend NÃO lança em erro de API — retorna { data, error }.
+    const { data, error } = await getResend().emails.send({
       from:    params.fromOverride?.trim() || FROM,
       to:      recipients,
       subject: `Boleto #${shortId} — ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(params.total)} | ${params.tenantName}`,
       html:    boletoHtml(params.tenantName, params.clientName, shortId, params.total, params.linhaDigitavel, params.dueDate),
       attachments: [{ filename: `boleto-${shortId}.pdf`, content: params.pdf }],
     });
-    console.log("[EMAIL] boleto enviado para", recipients);
+    if (error) {
+      console.error("[EMAIL] Resend recusou o boleto:", error);
+      return false;
+    }
+    console.log("[EMAIL] boleto enviado", data?.id, "para", recipients);
     return true;
   } catch (err) {
     console.error("[EMAIL] erro boleto:", err);
