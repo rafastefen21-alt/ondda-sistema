@@ -28,7 +28,7 @@ const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", cur
 export async function emitirBoletoPagamento(
   paymentId: string,
   tenantId: string,
-  opts: { notificar?: boolean; nfNumero?: string | null } = {},
+  opts: { notificar?: boolean; nfNumero?: string | null; vencimento?: string | null } = {},
 ): Promise<{ nossoNumero: string; linhaDigitavel: string | null; codigoBarras: string | null }> {
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, tenantId },
@@ -71,6 +71,17 @@ export async function emitirBoletoPagamento(
 
   const client = payment.order.client;
   const total = Number(payment.amount);
+
+  // Vencimento: usa o informado (edição na tela) ou o que já está no pagamento.
+  let dueDate = payment.dueDate;
+  if (opts.vencimento) {
+    const d = new Date(`${opts.vencimento}T12:00:00`);
+    if (!isNaN(d.getTime())) {
+      dueDate = d;
+      await prisma.payment.update({ where: { id: payment.id }, data: { dueDate } });
+    }
+  }
+
   const nossoNumero = await proximoNossoNumero(tenantId);
 
   const boleto = await emitirBoleto({
@@ -101,7 +112,7 @@ export async function emitirBoletoPagamento(
       email:       client.email,
     },
     valor:       total,
-    vencimento:  payment.dueDate,
+    vencimento:  dueDate,
     nossoNumero,
     seuNumero:   payment.orderId.slice(-10).toUpperCase(),
     mensagens:   opts.nfNumero ? [`Ref. NF-e no ${opts.nfNumero}`] : undefined,
@@ -134,7 +145,7 @@ export async function emitirBoletoPagamento(
       if (pdf) {
         emailOk = await sendBoletoEmail({
           to: recipients, tenantName: tenant.name, clientName, orderId: payment.orderId,
-          total, linhaDigitavel: boleto.linhaDigitavel, pdf, dueDate: payment.dueDate,
+          total, linhaDigitavel: boleto.linhaDigitavel, pdf, dueDate,
           fromOverride: tenant.emailRemetente,
         });
       }

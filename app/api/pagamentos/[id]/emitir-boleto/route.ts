@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth";
 import { emitirBoletoPagamento } from "@/lib/cobranca-service";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -21,8 +21,11 @@ export async function POST(
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   }
 
+  const body = await req.json().catch(() => ({}));
+  const vencimento = typeof body?.vencimento === "string" ? body.vencimento : null;
+
   try {
-    const boleto = await emitirBoletoPagamento(id, session.user.tenantId, { notificar: true });
+    const boleto = await emitirBoletoPagamento(id, session.user.tenantId, { notificar: true, vencimento });
     return NextResponse.json({ ok: true, ...boleto });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });

@@ -209,6 +209,9 @@ export function OrderDetailClient({
   const [generatingCharge, setGeneratingCharge] = useState(false);
   const [emitindoBoleto, setEmitindoBoleto] = useState<string | null>(null);
   const [reenviandoBoleto, setReenviandoBoleto] = useState<string | null>(null);
+  // Vencimento editável por pagamento (default = vencimento já do pagamento)
+  const [boletoVenc, setBoletoVenc] = useState<Record<string, string>>({});
+  const isoDate = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
 
   async function reenviarBoleto(paymentId: string) {
     setReenviandoBoleto(paymentId);
@@ -230,12 +233,16 @@ export function OrderDetailClient({
 
   // Emite o boleto Itaú para um pagamento já existente, envia por e-mail e
   // abre o PDF para impressão.
-  async function emitirBoletoItau(paymentId: string) {
+  async function emitirBoletoItau(paymentId: string, vencimento?: string) {
     setEmitindoBoleto(paymentId);
     // Abre a aba já no clique (evita bloqueio de pop-up); a URL é definida depois.
     const janela = window.open("", "_blank");
     try {
-      const res  = await fetch(`/api/pagamentos/${paymentId}/emitir-boleto`, { method: "POST" });
+      const res  = await fetch(`/api/pagamentos/${paymentId}/emitir-boleto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vencimento: vencimento ?? null }),
+      });
       const data = await res.json();
       if (!res.ok) {
         janela?.close();
@@ -844,19 +851,31 @@ export function OrderDetailClient({
                               </>
                             ) : (
                               canUseMp && itauConfigured && p.status !== "PAGO" && p.method === "BOLETO" && (
-                                <button
-                                  onClick={() => emitirBoletoItau(p.id)}
-                                  disabled={emitindoBoleto === p.id}
-                                  title="Gerar boleto no Itaú e enviar por e-mail ao cliente"
-                                  className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100 disabled:opacity-50"
-                                >
-                                  {emitindoBoleto === p.id ? (
-                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
-                                  ) : (
-                                    <FileText className="h-3.5 w-3.5" />
-                                  )}
-                                  {emitindoBoleto === p.id ? "Gerando..." : "Gerar boleto Itaú"}
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                  <label className="flex items-center gap-1 text-xs text-gray-500" title="Vencimento do boleto (editável)">
+                                    Venc.:
+                                    <input
+                                      type="date"
+                                      value={boletoVenc[p.id] ?? isoDate(p.dueDate)}
+                                      min={isoDate(new Date())}
+                                      onChange={(e) => setBoletoVenc((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                                      className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                    />
+                                  </label>
+                                  <button
+                                    onClick={() => emitirBoletoItau(p.id, boletoVenc[p.id] ?? isoDate(p.dueDate))}
+                                    disabled={emitindoBoleto === p.id}
+                                    title="Gerar boleto no Itaú com esse vencimento e enviar ao cliente"
+                                    className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100 disabled:opacity-50"
+                                  >
+                                    {emitindoBoleto === p.id ? (
+                                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
+                                    ) : (
+                                      <FileText className="h-3.5 w-3.5" />
+                                    )}
+                                    {emitindoBoleto === p.id ? "Gerando..." : "Gerar boleto Itaú"}
+                                  </button>
+                                </div>
                               )
                             )}
                             {canUseMp && p.status !== "PAGO" && (
