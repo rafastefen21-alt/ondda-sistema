@@ -1292,8 +1292,8 @@ export function OrderDetailClient({
                           </>
                         )}
 
-                        {/* DANFe — proxy server-side (não expõe o token) */}
-                        {inv.status === "EMITIDA" && (inv.pdfUrl || inv.focusNfeRef) && (
+                        {/* DANFe — proxy server-side (não expõe o token). Disponível também para nota cancelada. */}
+                        {(inv.status === "EMITIDA" || inv.status === "CANCELADA") && (inv.pdfUrl || inv.focusNfeRef) && (
                           <button
                             onClick={async () => {
                               try {
@@ -1327,8 +1327,8 @@ export function OrderDetailClient({
                           </button>
                         )}
 
-                        {/* XML da NF-e — proxy server-side (não expõe o token) */}
-                        {inv.status === "EMITIDA" && (inv.focusNfeRef || inv.xmlUrl) && (
+                        {/* XML da NF-e — proxy server-side (não expõe o token). Disponível também para nota cancelada. */}
+                        {(inv.status === "EMITIDA" || inv.status === "CANCELADA") && (inv.focusNfeRef || inv.xmlUrl) && (
                           <button
                             onClick={async () => {
                               try {
