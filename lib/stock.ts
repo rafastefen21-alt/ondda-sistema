@@ -38,8 +38,9 @@ export async function adjustStock({
     update: {},
   });
 
-  // Atualiza a quantidade (não deixa ir abaixo de 0 em saída)
-  const newQty = Math.max(0, Number(item.quantity) + delta);
+  // Permite saldo negativo (venda antes da mercadoria chegar da fábrica).
+  // Quando a carga chega e é dada entrada, o saldo se ajusta sozinho.
+  const newQty = Number(item.quantity) + delta;
 
   const [updated] = await prisma.$transaction([
     prisma.stockItem.update({
