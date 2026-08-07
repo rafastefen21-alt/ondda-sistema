@@ -2,11 +2,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Users, ShoppingBag, Download } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Plus, Users, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/utils";
+import { ClientesList } from "./clientes-list";
 
 export default async function ClientesPage() {
   const session = await auth();
@@ -51,40 +49,19 @@ export default async function ClientesPage() {
       </div>
 
       {clients.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {clients.map((client) => (
-            <Link key={client.id} href={`/clientes/${client.id}`}>
-              <Card className="cursor-pointer transition-shadow hover:shadow-md">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
-                      <Users className="h-5 w-5 text-blue-800" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-gray-900">
-                        {client.nomeFantasia ?? client.name ?? "Sem nome"}
-                      </p>
-                      {client.nomeFantasia && (
-                        <p className="truncate text-xs text-gray-400">{client.name}</p>
-                      )}
-                      <p className="truncate text-sm text-gray-400">{client.email}</p>
-                    </div>
-                    <Badge variant={client.active ? "success" : "secondary"}>
-                      {client.active ? "Ativo" : "Inativo"}
-                    </Badge>
-                  </div>
-                  <div className="mt-4 flex items-center gap-1 text-sm text-gray-500">
-                    <ShoppingBag className="h-3.5 w-3.5" />
-                    <span>{client._count.orders} pedido(s)</span>
-                    <span className="ml-auto text-xs text-gray-400">
-                      desde {formatDate(client.createdAt)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <ClientesList
+          clients={clients.map((c) => ({
+            id: c.id,
+            name: c.name,
+            nomeFantasia: c.nomeFantasia,
+            email: c.email,
+            cnpj: c.cnpj,
+            cpf: c.cpf,
+            active: c.active,
+            createdAt: c.createdAt.toISOString(),
+            ordersCount: c._count.orders,
+          }))}
+        />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 py-16">
           <Users className="mb-4 h-12 w-12 text-gray-300" />

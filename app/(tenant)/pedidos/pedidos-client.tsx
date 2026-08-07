@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import {
   List, Columns, ShoppingCart, ArrowRight, Plus,
-  Upload, Download, CheckCircle2, AlertTriangle, X,
+  Upload, Download, CheckCircle2, AlertTriangle, X, Search,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatCurrency, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, canSeePrice } from "@/lib/utils";
@@ -80,6 +80,7 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
   const [view, setView] = useState<"lista" | "kanban">("lista");
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [movingId, setMovingId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const dragOrderId = useRef<string | null>(null);
@@ -180,16 +181,26 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
     );
   }
 
+  // ── Busca por cliente / nº do pedido ─────────────────────────────────────────
+
+  const term = search.trim().toLowerCase();
+  function matchSearch(o: Order) {
+    if (!term) return true;
+    const cliente = (o.client?.name ?? "").toLowerCase();
+    const numero  = o.id.slice(-6).toLowerCase();
+    return cliente.includes(term) || numero.includes(term);
+  }
+
   // ── Filtered for list view ───────────────────────────────────────────────────
 
-  const filteredOrders = statusFilter
-    ? orders.filter((o) => o.status === statusFilter)
-    : orders;
+  const filteredOrders = orders
+    .filter((o) => (statusFilter ? o.status === statusFilter : true))
+    .filter(matchSearch);
 
   // ── Kanban columns ─────────────────────────────────────────────────────────
 
   function columnOrders(status: OrderStatus) {
-    return orders.filter((o) => o.status === status);
+    return orders.filter((o) => o.status === status).filter(matchSearch);
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -259,6 +270,20 @@ export function PedidosClient({ initialOrders, role, isClient }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── Busca por cliente ─────────────────────────────────────────────── */}
+      {!isClient && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar pedido por cliente ou nº..."
+            className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+          />
+        </div>
+      )}
 
       {/* ── CSV Import Panel ──────────────────────────────────────────────── */}
       {csvPanel && !isClient && (
