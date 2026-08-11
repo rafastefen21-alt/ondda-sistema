@@ -23,7 +23,7 @@ export default async function OrderDetailPage({
       ...(isClient ? { clientId: userId } : {}),
     },
     include: {
-      client: { select: { id: true, name: true, email: true } },
+      client: { select: { id: true, name: true, email: true, prazoBoletoDias: true } },
       approvedBy: { select: { name: true } },
       items: {
         include: {
@@ -78,6 +78,7 @@ export default async function OrderDetailPage({
       role={role}
       showPrice={showPrice}
       itauConfigured={itauConfigured}
+      clientPrazoBoleto={order.client.prazoBoletoDias ?? null}
     />
   );
 }

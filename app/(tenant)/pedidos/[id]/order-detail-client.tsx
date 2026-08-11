@@ -145,6 +145,7 @@ interface OrderDetailClientProps {
   role: string;
   showPrice: boolean;
   itauConfigured: boolean;
+  clientPrazoBoleto: number | null;
 }
 
 export function OrderDetailClient({
@@ -152,6 +153,7 @@ export function OrderDetailClient({
   role,
   showPrice,
   itauConfigured,
+  clientPrazoBoleto,
 }: OrderDetailClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -300,7 +302,10 @@ export function OrderDetailClient({
       const res = await fetch(`/api/pedidos/${order.id}/cobrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentMethod: chargeMethod }),
+        body: JSON.stringify({
+          paymentMethod: chargeMethod,
+          ...(chargeMethod === "BOLETO" ? { vencimento: boletoVencimento } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -334,13 +339,14 @@ export function OrderDetailClient({
   const [registeringPay, setRegisteringPay] = useState(false);
 
   // Vencimento padrão para boleto: 7 dias a partir de hoje
-  // Inicializado vazio para evitar hydration mismatch (server x client timezone)
+  // Inicializado vazio para evitar hydration mismatch (server x client timezone).
+  // Default = hoje + prazo de boleto do cliente (ou 7 dias se não houver prazo).
   const [boletoVencimento, setBoletoVencimento] = useState("");
   useEffect(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 7);
+    d.setDate(d.getDate() + (clientPrazoBoleto && clientPrazoBoleto > 0 ? clientPrazoBoleto : 7));
     setBoletoVencimento(d.toISOString().slice(0, 10));
-  }, []);
+  }, [clientPrazoBoleto]);
 
   /** Cria um pagamento manual já marcado como PAGO */
   async function registerAsPaid() {
@@ -1067,6 +1073,27 @@ export function OrderDetailClient({
                           ))}
                         </select>
                       </div>
+
+                      {/* Vencimento do boleto — visível e editável antes de gerar */}
+                      {chargeMethod === "BOLETO" && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-gray-600">
+                            Vencimento do boleto
+                          </label>
+                          <input
+                            type="date"
+                            value={boletoVencimento}
+                            min={new Date().toISOString().slice(0, 10)}
+                            onChange={(e) => setBoletoVencimento(e.target.value)}
+                            className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-1"
+                          />
+                          <p className="text-xs text-gray-400">
+                            {clientPrazoBoleto && clientPrazoBoleto > 0
+                              ? `Padrão: ${clientPrazoBoleto} dias (prazo do cliente). Ajuste se precisar.`
+                              : "Cliente sem prazo cadastrado — padrão de 7 dias. Ajuste se precisar."}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Botão: Registrar como Pago */}
                       <button

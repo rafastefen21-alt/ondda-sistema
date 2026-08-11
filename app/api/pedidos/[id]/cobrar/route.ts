@@ -73,14 +73,23 @@ export async function POST(
     "PIX";
 
   // Vencimento:
+  // - se veio uma data explícita no body (escolhida na tela) → usa ela
   // - BOLETO com prazo no cadastro do cliente → hoje + prazoBoletoDias
   // - demais casos → próximo dia útil (amanhã), comportamento padrão
-  const dueDate = new Date();
-  const prazo = order.client.prazoBoletoDias;
-  if (paymentMethod === "BOLETO" && typeof prazo === "number" && prazo > 0) {
-    dueDate.setDate(dueDate.getDate() + prazo);
+  let dueDate: Date;
+  const vencInformado = typeof body.vencimento === "string"
+    ? new Date(`${body.vencimento}T12:00:00`)
+    : null;
+  if (paymentMethod === "BOLETO" && vencInformado && !isNaN(vencInformado.getTime())) {
+    dueDate = vencInformado;
   } else {
-    dueDate.setDate(dueDate.getDate() + 1);
+    dueDate = new Date();
+    const prazo = order.client.prazoBoletoDias;
+    if (paymentMethod === "BOLETO" && typeof prazo === "number" && prazo > 0) {
+      dueDate.setDate(dueDate.getDate() + prazo);
+    } else {
+      dueDate.setDate(dueDate.getDate() + 1);
+    }
   }
 
   // Create payment record
