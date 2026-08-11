@@ -158,6 +158,29 @@ export async function POST(
   });
   const customPriceMap = new Map(customPriceRows.map((c) => [c.productId, c]));
 
+  // Preço unitário aplicando preço customizado / tier
+  const precoUnit = (item: typeof data.items[number]): number => {
+    const p = productMap.get(item.productId)!;
+    const custom = customPriceMap.get(item.productId);
+    let unitPrice = custom?.price ?? p.price;
+    if (item.tier === "pacote") unitPrice = custom?.pricePacote ?? p.pricePacote ?? unitPrice;
+    if (item.tier === "caixa")  unitPrice = custom?.priceCaixa  ?? p.priceCaixa  ?? unitPrice;
+    return Number(unitPrice);
+  };
+
+  // ── Valor mínimo do pedido (validação no servidor) ──────────────────────────
+  if (data.items.length > 0) {
+    const total = data.items.reduce((s, item) => s + precoUnit(item) * item.quantity, 0);
+    const minimo = tenant.lojaPedidoMinimo ? Number(tenant.lojaPedidoMinimo) : 0;
+    if (minimo > 0 && total < minimo) {
+      const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      return NextResponse.json(
+        { error: `O pedido mínimo desta loja é de ${fmt(minimo)}. Seu total é ${fmt(total)} — adicione mais ${fmt(minimo - total)}.` },
+        { status: 400 },
+      );
+    }
+  }
+
   // Build notes (append CNPJ if provided)
   const cnpjLine = data.type === "novo" && data.cnpj ? `CNPJ: ${data.cnpj}` : null;
   const notesText = [cnpjLine, data.notes].filter(Boolean).join("\n") || null;
