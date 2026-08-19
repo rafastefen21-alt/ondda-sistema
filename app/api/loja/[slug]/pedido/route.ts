@@ -158,19 +158,25 @@ export async function POST(
   });
   const customPriceMap = new Map(customPriceRows.map((c) => [c.productId, c]));
 
-  // Preço unitário aplicando preço customizado / tier
-  const precoUnit = (item: typeof data.items[number]): number => {
+  // Resolve o item com o MESMO tier que a loja oferece (caixa > pacote > unidade),
+  // aplicando preço customizado. IGNORA o tier enviado pelo cliente — assim não é
+  // possível comprar a preço de um tier inferior (ex.: unidade) quando a loja
+  // vende por caixa.
+  const resolverItem = (item: typeof data.items[number]): { unitPrice: number; tierLabel: string | null } => {
     const p = productMap.get(item.productId)!;
     const custom = customPriceMap.get(item.productId);
-    let unitPrice = custom?.price ?? p.price;
-    if (item.tier === "pacote") unitPrice = custom?.pricePacote ?? p.pricePacote ?? unitPrice;
-    if (item.tier === "caixa")  unitPrice = custom?.priceCaixa  ?? p.priceCaixa  ?? unitPrice;
-    return Number(unitPrice);
+    if (p.priceCaixa && p.labelCaixa) {
+      return { unitPrice: Number(custom?.priceCaixa ?? p.priceCaixa), tierLabel: p.labelCaixa };
+    }
+    if (p.pricePacote && p.labelPacote) {
+      return { unitPrice: Number(custom?.pricePacote ?? p.pricePacote), tierLabel: p.labelPacote };
+    }
+    return { unitPrice: Number(custom?.price ?? p.price), tierLabel: null };
   };
 
   // ── Valor mínimo do pedido (validação no servidor) ──────────────────────────
   if (data.items.length > 0) {
-    const total = data.items.reduce((s, item) => s + precoUnit(item) * item.quantity, 0);
+    const total = data.items.reduce((s, item) => s + resolverItem(item).unitPrice * item.quantity, 0);
     const minimo = tenant.lojaPedidoMinimo ? Number(tenant.lojaPedidoMinimo) : 0;
     if (minimo > 0 && total < minimo) {
       const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -195,19 +201,7 @@ export async function POST(
       paymentMethod: data.type === "existente" ? (data.paymentMethod ?? null) : null,
       items: {
         create: data.items.map((item) => {
-          const p      = productMap.get(item.productId)!;
-          const custom = customPriceMap.get(item.productId);
-
-          // Preço: customizado → padrão do produto (por tier)
-          let unitPrice = custom?.price       ?? p.price;
-          if (item.tier === "pacote") unitPrice = custom?.pricePacote ?? p.pricePacote ?? unitPrice;
-          if (item.tier === "caixa")  unitPrice = custom?.priceCaixa  ?? p.priceCaixa  ?? unitPrice;
-
-          // Tier label salvo em notes para exibição no pedido
-          let tierLabel: string | null = null;
-          if (item.tier === "caixa"  && p.labelCaixa)  tierLabel = p.labelCaixa;
-          if (item.tier === "pacote" && p.labelPacote)  tierLabel = p.labelPacote;
-
+          const { unitPrice, tierLabel } = resolverItem(item);
           return {
             productId: item.productId,
             quantity:  item.quantity,
