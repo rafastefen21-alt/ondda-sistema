@@ -19,7 +19,7 @@ export async function POST() {
 
   if (!tenant?.zapiInstanceId || !tenant?.zapiToken) {
     return NextResponse.json(
-      { error: "Z-API não configurada. Salve o Instance ID e Token primeiro." },
+      { error: "WhatsApp (Datafy) não configurado. Salve o Phone Number ID e o Token primeiro." },
       { status: 400 },
     );
   }

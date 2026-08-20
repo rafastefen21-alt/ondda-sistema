@@ -198,13 +198,13 @@ export function NotificacoesForm({ initial, zapiConfigured }: Props) {
             <h3 className="text-sm font-semibold text-gray-800">WhatsApp</h3>
             {!zapiConfigured && (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                Z-API não configurada
+                WhatsApp (Datafy) não configurado
               </span>
             )}
           </div>
           {!zapiConfigured && (
             <p className="mb-3 text-xs text-amber-600">
-              Configure a integração com Z-API na seção "Integrações" para habilitar envios automáticos via WhatsApp.
+              Configure a integração com a Datafy na seção "Integrações" para habilitar envios automáticos via WhatsApp.
             </p>
           )}
           <div className="space-y-2">

@@ -322,10 +322,10 @@ export function IntegracoesForm({ initial }: Props) {
       if (res.ok && data.connected) {
         setTestResultZapi({ ok: true, msg: "WhatsApp conectado e pronto para disparos!" });
       } else {
-        setTestResultZapi({ ok: false, msg: data.error ?? "Instância desconectada. Escaneie o QR code no painel Z-API." });
+        setTestResultZapi({ ok: false, msg: data.error ?? "Número não encontrado. Verifique o Phone Number ID e o Token no painel Datafy." });
       }
     } catch {
-      setTestResultZapi({ ok: false, msg: "Não foi possível conectar à Z-API." });
+      setTestResultZapi({ ok: false, msg: "Não foi possível conectar à Datafy." });
     } finally {
       setTestingZapi(false);
     }
@@ -845,7 +845,7 @@ export function IntegracoesForm({ initial }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <MessageCircle className="h-5 w-5 text-green-500" />
-            WhatsApp — Z-API
+            WhatsApp — Datafy
             <span
               className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
                 zapiConfigured ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
@@ -858,40 +858,40 @@ export function IntegracoesForm({ initial }: Props) {
         <CardContent>
           <p className="mb-4 text-sm text-gray-500">
             Envie mensagens e faça disparos em massa pelo WhatsApp diretamente do sistema.
-            Acesse{" "}
+            Conecte seu número em{" "}
             <a
-              href="https://app.z-api.io"
+              href="https://app.datafyapi.com.br"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-gray-700"
             >
-              app.z-api.io
+              app.datafyapi.com.br
             </a>{" "}
-            para obter o Instance ID e Token.
+            para obter o Phone Number ID e o Token (sk_live_...).
           </p>
 
           <form onSubmit={saveZapi} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="zapiInstanceId">Instance ID</Label>
+              <Label htmlFor="zapiInstanceId">Phone Number ID</Label>
               <Input
                 id="zapiInstanceId"
-                placeholder="Ex: 3C9B2C1D4E5F6..."
+                placeholder="ID do número (ex: 123456789012345)"
                 value={zapiInstanceId}
                 onChange={(e) => setZapiInstanceId(e.target.value)}
                 autoComplete="off"
               />
               <p className="text-xs text-gray-400">
-                Encontrado em: Instâncias → sua instância → &quot;Instance ID&quot;.
+                ID do número conectado no painel da Datafy.
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="zapiToken">Token</Label>
+              <Label htmlFor="zapiToken">Token da Datafy</Label>
               <div className="relative">
                 <Input
                   id="zapiToken"
                   type={showZapiToken ? "text" : "password"}
-                  placeholder="Token de segurança da instância"
+                  placeholder="sk_live_..."
                   value={zapiToken}
                   onChange={(e) => setZapiToken(e.target.value)}
                   autoComplete="off"
@@ -906,7 +906,7 @@ export function IntegracoesForm({ initial }: Props) {
                 </button>
               </div>
               <p className="text-xs text-gray-400">
-                Token de API da instância — diferente do Client-Token de webhook.
+                Token gerado no painel após conectar o número (formato sk_live_...).
               </p>
             </div>
 
@@ -931,7 +931,7 @@ export function IntegracoesForm({ initial }: Props) {
 
             <div className="flex flex-wrap items-center gap-3">
               <Button type="submit" disabled={loadingZapi}>
-                {loadingZapi ? "Salvando..." : "Salvar Z-API"}
+                {loadingZapi ? "Salvando..." : "Salvar Datafy"}
               </Button>
               {zapiConfigured && (
                 <Button

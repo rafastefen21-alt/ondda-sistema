@@ -1,11 +1,22 @@
 /**
- * Z-API wrapper — https://developer.z-api.io/
+ * WhatsApp via Datafy API — https://app.datafyapi.com.br/docs
  *
- * Credenciais armazenadas por tenant (zapiInstanceId + zapiToken).
+ * A Datafy é um "drop-in" da API oficial do WhatsApp (Meta Cloud API):
+ *   base  https://cloud.datafyapi.com.br/v1/
+ *   auth  Authorization: Bearer sk_live_xxx   (sempre no header)
+ *
+ * As funções/nomes são mantidos (zapiSendText, etc.) para não quebrar os
+ * pontos que já disparam WhatsApp. A config reaproveita os campos do tenant:
+ *   instanceId → Phone Number ID (ID do número no painel Datafy)
+ *   token      → token da Datafy (sk_live_...)
  */
 
+const DATAFY_BASE = "https://cloud.datafyapi.com.br/v1";
+
 export interface ZApiConfig {
+  /** Phone Number ID do número no painel Datafy. */
   instanceId: string;
+  /** Token da Datafy (sk_live_...). */
   token: string;
 }
 
@@ -16,55 +27,54 @@ export interface SendTextResult {
   zapiMessageId?: string;
 }
 
-/** Formata número para o padrão Z-API: apenas dígitos, com código do país. */
+/** Formata número para o padrão do WhatsApp: apenas dígitos, com DDI do país. */
 export function formatPhone(raw: string): string {
-  // Remove tudo que não é dígito
   let digits = raw.replace(/\D/g, "");
-
-  // Se começar com 0, remove
   if (digits.startsWith("0")) digits = digits.slice(1);
-
-  // Se não começar com 55 e tiver 10 ou 11 dígitos, adiciona 55
   if (!digits.startsWith("55") && (digits.length === 10 || digits.length === 11)) {
     digits = "55" + digits;
   }
-
   return digits;
 }
 
 /** Valida se o número formatado parece válido (DDI + DDD + número). */
 export function isValidPhone(formatted: string): boolean {
-  // Brasil: 55 + 2 dígitos DDD + 8 ou 9 dígitos = 12 ou 13 dígitos
   return /^55\d{10,11}$/.test(formatted);
 }
 
-/** URL base de uma instância Z-API. */
-function baseUrl(cfg: ZApiConfig): string {
-  return `https://api.z-api.io/instances/${cfg.instanceId}/token/${cfg.token}`;
+function authHeaders(cfg: ZApiConfig): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${cfg.token}`,
+  };
 }
 
 /**
- * Testa se a instância Z-API está conectada.
- * Retorna { connected: true } ou lança um erro.
+ * Testa se o número Datafy está acessível (consulta os dados do número).
+ * Retorna { connected: true } se a API responder OK.
  */
 export async function zapiTestConnection(cfg: ZApiConfig): Promise<{ connected: boolean; status?: string }> {
-  const res = await fetch(`${baseUrl(cfg)}/status`, {
+  if (!cfg.instanceId || !cfg.token) {
+    throw new Error("Configure o Phone Number ID e o Token da Datafy.");
+  }
+  const res = await fetch(`${DATAFY_BASE}/${encodeURIComponent(cfg.instanceId)}`, {
     method: "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(cfg),
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Z-API status ${res.status}: ${text}`);
+    throw new Error(`Datafy status ${res.status}: ${text.slice(0, 200)}`);
   }
 
-  const data = await res.json();
-  // Z-API retorna { connected: true/false, ... }
-  return { connected: !!data.connected, status: data.status };
+  const data = await res.json().catch(() => ({}));
+  // Na Cloud API não há "connected" — se respondeu OK com os dados do número, está ativo.
+  const numero = data?.display_phone_number ?? data?.verified_name ?? undefined;
+  return { connected: true, status: numero };
 }
 
 /**
- * Envia uma mensagem de texto para um número via Z-API.
+ * Envia uma mensagem de texto para um número via Datafy (Meta Cloud API).
  */
 export async function zapiSendText(
   cfg: ZApiConfig,
@@ -76,28 +86,35 @@ export async function zapiSendText(
   if (!isValidPhone(formatted)) {
     return { phone, success: false, error: "Número de telefone inválido" };
   }
+  if (!cfg.instanceId || !cfg.token) {
+    return { phone, success: false, error: "WhatsApp (Datafy) não configurado" };
+  }
 
   try {
-    const res = await fetch(`${baseUrl(cfg)}/send-text`, {
+    const res = await fetch(`${DATAFY_BASE}/${encodeURIComponent(cfg.instanceId)}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: formatted, message }),
+      headers: authHeaders(cfg),
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: formatted,
+        type: "text",
+        text: { preview_url: false, body: message },
+      }),
     });
 
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      return {
-        phone,
-        success: false,
-        error: data?.message ?? data?.error ?? `HTTP ${res.status}`,
-      };
+      // Meta Cloud API retorna { error: { message, ... } }
+      const msg = data?.error?.message ?? data?.message ?? `HTTP ${res.status}`;
+      return { phone, success: false, error: msg };
     }
 
     return {
       phone,
       success: true,
-      zapiMessageId: data?.zaapId ?? data?.messageId ?? undefined,
+      zapiMessageId: data?.messages?.[0]?.id ?? undefined,
     };
   } catch (err: unknown) {
     return {

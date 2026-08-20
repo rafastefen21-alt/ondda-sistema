@@ -159,12 +159,12 @@ export function WhatsAppClient({
         </div>
         <h1 className="text-xl font-bold text-gray-900">WhatsApp não configurado</h1>
         <p className="mt-2 max-w-sm text-sm text-gray-500">
-          Para usar os disparos, configure o Instance ID e Token da Z-API nas integrações.
+          Para usar os disparos, configure o Phone Number ID e o Token da Datafy nas integrações.
         </p>
         <Link href="/configuracoes#integracoes" className="mt-6">
           <Button className="gap-2">
             <Settings className="h-4 w-4" />
-            Configurar Z-API
+            Configurar Datafy
           </Button>
         </Link>
       </div>
@@ -181,11 +181,11 @@ export function WhatsAppClient({
             Disparos WhatsApp
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Envie mensagens personalizadas para seus clientes via Z-API.
+            Envie mensagens personalizadas para seus clientes via Datafy.
           </p>
         </div>
         <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-          Z-API conectada
+          Datafy conectada
         </Badge>
       </div>
 
