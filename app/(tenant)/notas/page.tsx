@@ -21,6 +21,7 @@ export default async function NotasPage() {
       order: {
         include: {
           client: { select: { name: true } },
+          items: { select: { quantity: true, unitPrice: true } },
         },
       },
     },
@@ -39,6 +40,7 @@ export default async function NotasPage() {
     errorMsg:    inv.errorMsg ?? null,
     orderId:     inv.orderId,
     clientName:  inv.order.client?.name ?? null,
+    valor:       inv.order.items.reduce((s, it) => s + Number(it.quantity) * Number(it.unitPrice), 0),
   }));
 
   return (

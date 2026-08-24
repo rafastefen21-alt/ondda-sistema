@@ -4,14 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   FileText, Download, AlertCircle, CheckCircle2, Clock, XCircle,
-  Edit3, Ban, Search, RefreshCw, ExternalLink, FileCheck,
+  Edit3, Ban, Search, RefreshCw, ExternalLink, FileCheck, FileCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 
 type InvoiceStatus = "EMITIDA" | "PROCESSANDO" | "ERRO" | "CANCELADA";
 
@@ -27,6 +27,7 @@ export interface InvoiceItem {
   errorMsg: string | null;
   orderId: string;
   clientName: string | null;
+  valor: number;
 }
 
 const STATUS_CFG: Record<InvoiceStatus, { label: string; variant: "success" | "warning" | "destructive" | "secondary"; icon: React.ElementType; row: string }> = {
@@ -195,6 +196,7 @@ export function NotasClient({ invoices: initial }: { invoices: InvoiceItem[] }) 
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Nota</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Cliente</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600">Valor</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Data</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Ações</th>
@@ -222,6 +224,9 @@ export function NotasClient({ invoices: initial }: { invoices: InvoiceItem[] }) 
                     <td className="px-4 py-3">
                       <p className="text-gray-700">{inv.clientName ?? "—"}</p>
                     </td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+                      {formatCurrency(inv.valor)}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <Badge variant={cfg.variant} className="inline-flex items-center gap-1">
                         <Icon className="h-3 w-3" />
@@ -234,52 +239,48 @@ export function NotasClient({ invoices: initial }: { invoices: InvoiceItem[] }) 
                         : formatDate(new Date(inv.createdAt))}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                         {/* DANFE */}
-                        {inv.pdfUrl && (
+                        {(inv.pdfUrl || ((inv.status === "EMITIDA" || inv.status === "CANCELADA") && inv.focusNfeRef)) && (
                           <a
-                            href={inv.pdfUrl}
+                            href={inv.pdfUrl ?? `/api/nfe/${inv.id}/danfe`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            title="Baixar DANFE"
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            title="Baixar DANFE (PDF)"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
                           >
-                            <Download className="h-3.5 w-3.5" />
-                            DANFE
+                            <Download className="h-4 w-4" />
                           </a>
                         )}
                         {/* XML */}
-                        {inv.status === "EMITIDA" && inv.focusNfeRef && (
+                        {(inv.status === "EMITIDA" || inv.status === "CANCELADA") && inv.focusNfeRef && (
                           <a
                             href={`/api/nfe/${inv.id}/xml`}
                             download
-                            title="Baixar XML"
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            title="Baixar XML da NF-e"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
                           >
-                            <Download className="h-3.5 w-3.5" />
-                            XML
+                            <FileCode className="h-4 w-4" />
                           </a>
                         )}
                         {/* Enviar CC-e */}
                         {inv.status === "EMITIDA" && (
                           <button
                             onClick={() => { setCceInvoice(inv); setCceTexto(""); setCceSeq("1"); setCceError(""); setCceSuccess(false); setCceLinks(null); }}
-                            title="Enviar Carta de Correção"
-                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                            title="Enviar Carta de Correção (CC-e)"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
                           >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            CC-e
+                            <Edit3 className="h-4 w-4" />
                           </button>
                         )}
                         {/* Baixar CC-e já enviada */}
                         {inv.status === "EMITIDA" && (
                           <button
                             onClick={() => openCceView(inv)}
-                            title="Baixar CC-e já enviada"
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                            title="Ver / baixar CC-e já enviada"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
                           >
-                            <FileCheck className="h-3.5 w-3.5" />
-                            Ver CC-e
+                            <FileCheck className="h-4 w-4" />
                           </button>
                         )}
                         {/* Cancelar */}
@@ -287,20 +288,18 @@ export function NotasClient({ invoices: initial }: { invoices: InvoiceItem[] }) 
                           <button
                             onClick={() => { setCancelInvoice(inv); setCancelJust(""); setCancelError(""); setCancelSuccess(false); }}
                             title="Cancelar NF-e"
-                            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                           >
-                            <Ban className="h-3.5 w-3.5" />
-                            Cancelar
+                            <Ban className="h-4 w-4" />
                           </button>
                         )}
                         {/* Ver pedido */}
                         <Link
                           href={`/pedidos/${inv.orderId}`}
                           title="Ver pedido"
-                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Pedido
+                          <ExternalLink className="h-4 w-4" />
                         </Link>
                       </div>
                     </td>
