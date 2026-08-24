@@ -251,8 +251,25 @@ function CardPanel({
           {/* Stage navigation */}
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Etapa atual</p>
-            <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-800">
-              {allStages.find((s) => s.key === card.stage)?.label ?? card.stage}
+            <select
+              value={card.stage}
+              onChange={(e) => moveStage(e.target.value)}
+              disabled={saving}
+              className="mb-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
+            >
+              <optgroup label="Novos clientes">
+                {NOVOS_STAGES.map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Pós-venda">
+                {POS_VENDA_STAGES.map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
+                ))}
+              </optgroup>
+            </select>
+            <p className="mb-3 text-xs text-gray-400">
+              Escolha qualquer etapa — inclusive mover direto para o pós-venda.
             </p>
             <div className="flex gap-2">
               {prevStage && (
@@ -426,21 +443,26 @@ export function CrmClient({
   }
 
   function handleUpdate(updated: CrmCard) {
-    // If tab changed (FECHADO → POS_VENDA), move between lists
-    if (updated.tab === "POS_VENDA") {
-      setNovos((prev) => prev.filter((c) => c.id !== updated.id));
-      setPosVenda((prev) => {
-        const exists = prev.find((c) => c.id === updated.id);
-        return exists ? prev.map((c) => c.id === updated.id ? updated : c) : [updated, ...prev];
-      });
-      setSelected(updated);
-      // Auto-switch tab to pós-venda
-      setActiveTab("POS_VENDA");
+    const estavaPos = posVenda.some((c) => c.id === updated.id);
+    const agoraPos  = updated.tab === "POS_VENDA";
+
+    if (estavaPos !== agoraPos) {
+      // Mudou de aba (nos dois sentidos) → move entre as listas e troca a aba
+      if (agoraPos) {
+        setNovos((prev) => prev.filter((c) => c.id !== updated.id));
+        setPosVenda((prev) => [updated, ...prev.filter((c) => c.id !== updated.id)]);
+        setActiveTab("POS_VENDA");
+      } else {
+        setPosVenda((prev) => prev.filter((c) => c.id !== updated.id));
+        setNovos((prev) => [updated, ...prev.filter((c) => c.id !== updated.id)]);
+        setActiveTab("NOVOS");
+      }
     } else {
+      // Mesma aba → só atualiza no lugar
       setNovos((prev) => prev.map((c) => c.id === updated.id ? updated : c));
       setPosVenda((prev) => prev.map((c) => c.id === updated.id ? updated : c));
-      setSelected(updated);
     }
+    setSelected(updated);
   }
 
   function handleDelete(id: string) {
