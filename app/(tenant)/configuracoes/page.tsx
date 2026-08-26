@@ -177,6 +177,7 @@ export default async function ConfiguracoesPage() {
                 emailRemetente: tenant.emailRemetente ?? null,
                 zapiInstanceId: tenant.zapiInstanceId ?? null,
                 zapiToken:      tenant.zapiToken      ?? null,
+                datafyWebhookSecret: tenant.datafyWebhookSecret ?? null,
                 itauClientId:     tenant.itauClientId     ?? null,
                 itauClientSecret: tenant.itauClientSecret ?? null,
                 itauCertificado:  tenant.itauCertificado  ?? null,

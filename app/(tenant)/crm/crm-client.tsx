@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus, X, ChevronRight, ChevronLeft, Trash2,
-  Phone, Mail, MessageCircle, User, StickyNote,
+  Phone, Mail, MessageCircle, User, StickyNote, Send, Loader2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,13 @@ interface CrmCardClient {
   phone: string | null;
 }
 
+interface WaConversationSummary {
+  unreadCount: number;
+  lastMessageText: string | null;
+  lastMessageAt: string | null;
+  lastDirection: string | null;
+}
+
 interface CrmCard {
   id: string;
   tab: string;
@@ -31,6 +38,16 @@ interface CrmCard {
   notes: string | null;
   clientId: string | null;
   client: CrmCardClient | null;
+  createdAt: string;
+  waConversation?: WaConversationSummary | null;
+}
+
+interface WaMessageItem {
+  id?: string;
+  direction: string;
+  body: string;
+  status?: string | null;
+  authorName?: string | null;
   createdAt: string;
 }
 
@@ -68,6 +85,161 @@ function cardDisplayName(card: CrmCard) {
 
 function cardPhone(card: CrmCard) {
   return card.client?.phone ?? card.leadPhone ?? null;
+}
+
+function formatMsgTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+// ─── WhatsApp conversation (inbox) ─────────────────────────────────────────────
+
+function Conversation({ card, stageTemplate }: { card: CrmCard; stageTemplate: string }) {
+  const [messages, setMessages] = useState<WaMessageItem[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [text, setText]         = useState("");
+  const [sending, setSending]   = useState(false);
+  const [error, setError]       = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  function scrollToBottom() {
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    function load(initial: boolean) {
+      if (initial) setLoading(true);
+      fetch(`/api/crm/cards/${card.id}/messages`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!active) return;
+          const list: WaMessageItem[] = Array.isArray(data.messages) ? data.messages : [];
+          setMessages((prev) => {
+            // Só rola/atualiza se mudou o número de mensagens (evita mexer enquanto digita)
+            if (prev.length !== list.length) scrollToBottom();
+            return list;
+          });
+        })
+        .catch(() => {})
+        .finally(() => { if (active && initial) setLoading(false); });
+    }
+
+    load(true);
+    const timer = setInterval(() => load(false), 15000);
+    return () => { active = false; clearInterval(timer); };
+  }, [card.id]);
+
+  async function send() {
+    const body = text.trim();
+    if (!body) return;
+    setSending(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/crm/cards/${card.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: body }),
+      });
+      const data = await res.json();
+      if (res.ok && data.message) {
+        setMessages((prev) => [...prev, data.message]);
+        setText("");
+        scrollToBottom();
+      } else {
+        setError(data.error ?? "Falha ao enviar.");
+      }
+    } catch {
+      setError("Erro de conexão.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <MessageCircle className="inline h-3.5 w-3.5 mr-1" />
+        Conversa (WhatsApp)
+      </p>
+
+      {/* Thread */}
+      <div
+        ref={scrollRef}
+        className="max-h-72 space-y-2 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-3"
+      >
+        {loading ? (
+          <p className="py-6 text-center text-xs text-gray-400">
+            <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+          </p>
+        ) : messages.length === 0 ? (
+          <p className="py-6 text-center text-xs text-gray-400">
+            Nenhuma mensagem ainda. Envie a primeira ou aguarde o cliente escrever.
+          </p>
+        ) : (
+          messages.map((m, i) => {
+            const out = m.direction === "OUT";
+            return (
+              <div key={m.id ?? i} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                    out
+                      ? "rounded-br-sm bg-green-500 text-white"
+                      : "rounded-bl-sm bg-white text-gray-800 border border-gray-200"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                  <p className={`mt-1 text-[10px] ${out ? "text-green-50/80" : "text-gray-400"}`}>
+                    {formatMsgTime(m.createdAt)}
+                    {out && m.status ? ` · ${m.status}` : ""}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Composer */}
+      <div className="mt-2">
+        {stageTemplate && (
+          <button
+            type="button"
+            onClick={() => setText(stageTemplate)}
+            className="mb-1.5 text-xs text-blue-600 hover:underline"
+          >
+            Inserir modelo da etapa
+          </button>
+        )}
+        <div className="flex items-end gap-2">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+            }}
+            rows={2}
+            placeholder="Escreva uma mensagem..."
+            className="flex-1 resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+          <button
+            onClick={send}
+            disabled={sending || !text.trim()}
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+            title="Enviar"
+          >
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </div>
+        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      </div>
+    </div>
+  );
 }
 
 // ─── New card form ─────────────────────────────────────────────────────────────
@@ -152,10 +324,9 @@ function CardPanel({
 }) {
   const [notes,   setNotes]   = useState(card.notes ?? "");
   const [saving,  setSaving]  = useState(false);
-  const [waSending, setWaSending] = useState(false);
-  const [waMsg,   setWaMsg]   = useState(
-    STAGE_WA_MESSAGES[card.stage]?.replace("{nome}", cardDisplayName(card)) ?? ""
-  );
+
+  const stageTemplate =
+    STAGE_WA_MESSAGES[card.stage]?.replace("{nome}", cardDisplayName(card)) ?? "";
 
   async function moveStage(newStage: string) {
     setSaving(true);
@@ -167,8 +338,6 @@ function CardPanel({
     if (res.ok) {
       const updated = await res.json();
       onUpdate(updated);
-      // Update WA message for new stage
-      setWaMsg(STAGE_WA_MESSAGES[updated.stage]?.replace("{nome}", cardDisplayName(updated)) ?? "");
     }
     setSaving(false);
   }
@@ -182,21 +351,6 @@ function CardPanel({
     });
     if (res.ok) onUpdate(await res.json());
     setSaving(false);
-  }
-
-  async function sendWhatsApp() {
-    const phone = cardPhone(card);
-    if (!phone || !waMsg.trim()) return;
-    setWaSending(true);
-    await fetch("/api/zapi/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: waMsg,
-        recipients: [{ clientId: card.id, phone, nome: cardDisplayName(card), nomeFantasia: cardDisplayName(card) }],
-      }),
-    });
-    setWaSending(false);
   }
 
   async function handleDelete() {
@@ -304,28 +458,14 @@ function CardPanel({
             </div>
           </div>
 
-          {/* WhatsApp */}
+          {/* WhatsApp — conversa (inbox) */}
           {zapiConfigured && cardPhone(card) && (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <MessageCircle className="inline h-3.5 w-3.5 mr-1" />
-                WhatsApp
-              </p>
-              <textarea
-                value={waMsg}
-                onChange={(e) => setWaMsg(e.target.value)}
-                rows={4}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-              />
-              <button
-                onClick={sendWhatsApp}
-                disabled={waSending || !waMsg.trim()}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-green-500 px-3 py-2 text-sm font-medium text-white hover:bg-green-600 disabled:opacity-50"
-              >
-                <MessageCircle className="h-4 w-4" />
-                {waSending ? "Enviando..." : "Enviar via WhatsApp"}
-              </button>
-            </div>
+            <Conversation card={card} stageTemplate={stageTemplate} />
+          )}
+          {zapiConfigured && !cardPhone(card) && (
+            <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-400">
+              Sem número de WhatsApp neste card — adicione um telefone para conversar.
+            </p>
           )}
 
           {/* Notes */}
@@ -391,10 +531,26 @@ function KanbanColumn({
             onClick={() => onCardClick(card)}
             className="w-full rounded-lg border border-gray-100 bg-gray-50 p-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-white hover:shadow"
           >
-            <p className="truncate text-sm font-medium text-gray-900">{cardDisplayName(card)}</p>
+            <div className="flex items-center gap-2">
+              <p className="flex-1 truncate text-sm font-medium text-gray-900">{cardDisplayName(card)}</p>
+              {!!card.waConversation?.unreadCount && (
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-green-500 px-1.5 text-[10px] font-bold text-white">
+                  {card.waConversation.unreadCount}
+                </span>
+              )}
+            </div>
             {cardPhone(card) && (
               <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
                 <Phone className="h-3 w-3" />{cardPhone(card)}
+              </p>
+            )}
+            {card.waConversation?.lastMessageText && (
+              <p className="mt-1 flex items-center gap-1 truncate text-xs text-gray-500">
+                <MessageCircle className="h-3 w-3 flex-shrink-0 text-green-500" />
+                <span className="truncate">
+                  {card.waConversation.lastDirection === "OUT" ? "Você: " : ""}
+                  {card.waConversation.lastMessageText}
+                </span>
               </p>
             )}
             {card.leadSource && (

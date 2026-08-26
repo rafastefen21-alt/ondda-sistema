@@ -111,6 +111,8 @@ model Tenant {
   // Z-API (WhatsApp)
   zapiInstanceId   String?
   zapiToken        String?
+  // Segredo do webhook da Datafy (assinatura HMAC das mensagens recebidas)
+  datafyWebhookSecret String?
 
   // Itaú — API de Cobrança (boleto registrado). Carteira 109.
   // Auth = mTLS (certificado + chave) + OAuth2 client_credentials.
@@ -153,6 +155,7 @@ model Tenant {
   factoryOrders  FactoryOrder[]
   clientPrices   ClientProductPrice[]
   crmCards       CrmCard[]
+  waConversations WaConversation[]
 
   @@index([slug])
 }
@@ -208,6 +211,7 @@ model User {
   approvedOrders Order[]  @relation("OrderApprover")
   clientPrices   ClientProductPrice[]
   crmCards       CrmCard[]
+  waConversations WaConversation[]
 
   @@index([tenantId])
 }
@@ -544,9 +548,62 @@ model CrmCard {
 
   notes     String?
 
+  // Conversa de WhatsApp (inbox) vinculada a este card
+  waConversation WaConversation?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([tenantId, tab, stage])
   @@index([clientId])
+}
+
+// ============================================================
+// WHATSAPP INBOX (Datafy) — conversas recebidas/enviadas
+// ============================================================
+
+model WaConversation {
+  id          String  @id @default(cuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  phone       String  // apenas dígitos, com DDI (ex: 5511999999999)
+  contactName String? // nome do perfil no WhatsApp
+
+  // Cliente cadastrado (se o número casar) e card do CRM onde a conversa aparece
+  clientId    String?
+  client      User?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  crmCardId   String?  @unique
+  crmCard     CrmCard? @relation(fields: [crmCardId], references: [id], onDelete: SetNull)
+
+  lastMessageAt   DateTime?
+  lastMessageText String?
+  lastDirection   String?   // "IN" | "OUT"
+  unreadCount     Int       @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages    WaMessage[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId, lastMessageAt])
+}
+
+model WaMessage {
+  id             String  @id @default(cuid())
+  conversationId String
+  conversation   WaConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  direction   String  // "IN" | "OUT"
+  body        String
+  type        String  @default("text")
+  waMessageId String? // id da mensagem no provedor (Meta/Datafy)
+  status      String? // saída: sent | delivered | read | failed
+  authorName  String? // quem enviou (usuário do sistema), para OUT
+
+  createdAt   DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([waMessageId])
 }

@@ -31,6 +31,7 @@ interface Props {
     emailRemetente: string | null;
     zapiInstanceId: string | null;
     zapiToken:      string | null;
+    datafyWebhookSecret: string | null;
     itauClientId:     string | null;
     itauClientSecret: string | null;
     itauCertificado:  string | null;
@@ -60,6 +61,13 @@ export function IntegracoesForm({ initial }: Props) {
       router.replace("/configuracoes");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // URL pública do webhook da Datafy (para colar no painel deles)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setWebhookUrl(`${window.location.origin}/api/webhooks/datafy`);
+    }
   }, []);
 
   // ── Mercado Pago state ────────────────────────────────────────────────────────
@@ -106,6 +114,10 @@ export function IntegracoesForm({ initial }: Props) {
   // ── Z-API state ───────────────────────────────────────────────────────────────
   const [zapiInstanceId,  setZapiInstanceId]  = useState(initial.zapiInstanceId ?? "");
   const [zapiToken,       setZapiToken]       = useState(initial.zapiToken ?? "");
+  const [datafyWebhookSecret, setDatafyWebhookSecret] = useState(initial.datafyWebhookSecret ?? "");
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const [webhookUrl,      setWebhookUrl]      = useState("");
+  const [copiedWebhook,   setCopiedWebhook]   = useState(false);
   const [showZapiToken,   setShowZapiToken]   = useState(false);
   const [loadingZapi,     setLoadingZapi]     = useState(false);
   const [successZapi,     setSuccessZapi]     = useState(false);
@@ -301,6 +313,7 @@ export function IntegracoesForm({ initial }: Props) {
       body: JSON.stringify({
         zapiInstanceId: zapiInstanceId || null,
         zapiToken:      zapiToken      || null,
+        datafyWebhookSecret: datafyWebhookSecret || null,
       }),
     });
     setLoadingZapi(false);
@@ -908,6 +921,63 @@ export function IntegracoesForm({ initial }: Props) {
               <p className="text-xs text-gray-400">
                 Token gerado no painel após conectar o número (formato sk_live_...).
               </p>
+            </div>
+
+            {/* Webhook de recebimento (conversas entram no CRM) */}
+            <div className="space-y-3 rounded-lg border border-green-100 bg-green-50/40 p-3">
+              <p className="text-sm font-medium text-gray-700">
+                Receber conversas no CRM
+              </p>
+              <p className="text-xs text-gray-500">
+                Para que as mensagens que os clientes enviam apareçam no CRM, cadastre a
+                URL abaixo como <span className="font-medium">webhook</span> no painel da Datafy.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label>URL do webhook</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={webhookUrl} className="font-mono text-xs" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (webhookUrl && navigator.clipboard) {
+                        navigator.clipboard.writeText(webhookUrl);
+                        setCopiedWebhook(true);
+                        setTimeout(() => setCopiedWebhook(false), 2000);
+                      }
+                    }}
+                  >
+                    {copiedWebhook ? "Copiado!" : "Copiar"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="datafyWebhookSecret">Segredo do webhook (opcional)</Label>
+                <div className="relative">
+                  <Input
+                    id="datafyWebhookSecret"
+                    type={showWebhookSecret ? "text" : "password"}
+                    placeholder="whsec_... (gerado no painel Datafy)"
+                    value={datafyWebhookSecret}
+                    onChange={(e) => setDatafyWebhookSecret(e.target.value)}
+                    autoComplete="off"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showWebhookSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Se a Datafy fornecer um segredo de assinatura, cole aqui para validar a
+                  origem das mensagens. Deixe em branco se não usar.
+                </p>
+              </div>
             </div>
 
             {errorZapi && (

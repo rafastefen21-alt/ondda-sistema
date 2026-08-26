@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
       client: {
         select: { id: true, name: true, nomeFantasia: true, email: true, phone: true },
       },
+      waConversation: {
+        select: { unreadCount: true, lastMessageText: true, lastMessageAt: true, lastDirection: true },
+      },
     },
     orderBy: [{ stage: "asc" }, { position: "asc" }, { createdAt: "asc" }],
   });
@@ -60,7 +63,12 @@ export async function POST(req: NextRequest) {
       clientId:   parsed.data.clientId || null,
       notes:      parsed.data.notes || null,
     },
-    include: { client: { select: { id: true, name: true, nomeFantasia: true, email: true, phone: true } } },
+    include: {
+      client: { select: { id: true, name: true, nomeFantasia: true, email: true, phone: true } },
+      waConversation: {
+        select: { unreadCount: true, lastMessageText: true, lastMessageAt: true, lastDirection: true },
+      },
+    },
   });
 
   return NextResponse.json(card, { status: 201 });

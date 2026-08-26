@@ -35,6 +35,7 @@ const schema = z.object({
   // Z-API (WhatsApp)
   zapiInstanceId:   z.string().optional().nullable(),
   zapiToken:        z.string().optional().nullable(),
+  datafyWebhookSecret: z.string().optional().nullable(),
   // Itaú — API de Cobrança
   itauClientId:     z.string().optional().nullable(),
   itauClientSecret: z.string().optional().nullable(),
@@ -97,6 +98,7 @@ export async function PATCH(req: NextRequest) {
       ...(d.emailRemetente   !== undefined ? { emailRemetente:   d.emailRemetente   || null } : {}),
       ...(d.zapiInstanceId   !== undefined ? { zapiInstanceId:   d.zapiInstanceId   || null } : {}),
       ...(d.zapiToken        !== undefined ? { zapiToken:        d.zapiToken        || null } : {}),
+      ...(d.datafyWebhookSecret !== undefined ? { datafyWebhookSecret: d.datafyWebhookSecret || null } : {}),
       // Itaú
       ...(d.itauClientId     !== undefined ? { itauClientId:     d.itauClientId     || null } : {}),
       ...(d.itauClientSecret !== undefined ? { itauClientSecret: d.itauClientSecret || null } : {}),

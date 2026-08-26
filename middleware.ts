@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_PATHS = ["/", "/login", "/cadastro", "/loja", "/api/loja", "/api/auth", "/_next", "/favicon"];
+const PUBLIC_PATHS = ["/", "/login", "/cadastro", "/loja", "/api/loja", "/api/auth", "/api/webhooks", "/_next", "/favicon"];
 
 export default auth(async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

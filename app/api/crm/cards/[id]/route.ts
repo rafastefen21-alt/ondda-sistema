@@ -65,10 +65,25 @@ export async function PATCH(
   const updated = await prisma.crmCard.update({
     where: { id },
     data: updateData,
-    include: { client: { select: { id: true, name: true, nomeFantasia: true, email: true, phone: true } } },
+    include: {
+      client: { select: { id: true, name: true, nomeFantasia: true, email: true, phone: true } },
+      waConversation: {
+        select: { unreadCount: true, lastMessageText: true, lastMessageAt: true, lastDirection: true },
+      },
+    },
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json({
+    ...updated,
+    waConversation: updated.waConversation
+      ? {
+          ...updated.waConversation,
+          lastMessageAt: updated.waConversation.lastMessageAt
+            ? updated.waConversation.lastMessageAt.toISOString()
+            : null,
+        }
+      : null,
+  });
 }
 
 export async function DELETE(
