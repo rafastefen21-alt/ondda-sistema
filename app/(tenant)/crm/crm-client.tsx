@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Plus, X, ChevronRight, ChevronLeft, Trash2,
-  Phone, Mail, MessageCircle, User, StickyNote, Send, Loader2,
+  Phone, Mail, MessageCircle, StickyNote, Send, Loader2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -162,39 +162,39 @@ function Conversation({ card, stageTemplate }: { card: CrmCard; stageTemplate: s
   }
 
   return (
-    <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <MessageCircle className="inline h-3.5 w-3.5 mr-1" />
-        Conversa (WhatsApp)
-      </p>
-
+    <div className="flex h-full min-h-0 flex-col">
       {/* Thread */}
       <div
         ref={scrollRef}
-        className="max-h-72 space-y-2 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-3"
+        className="flex-1 space-y-2 overflow-y-auto bg-[#efeae2] p-4"
       >
         {loading ? (
-          <p className="py-6 text-center text-xs text-gray-400">
-            <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+          <p className="py-10 text-center text-xs text-gray-500">
+            <Loader2 className="mx-auto h-5 w-5 animate-spin" />
           </p>
         ) : messages.length === 0 ? (
-          <p className="py-6 text-center text-xs text-gray-400">
-            Nenhuma mensagem ainda. Envie a primeira ou aguarde o cliente escrever.
-          </p>
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <MessageCircle className="mb-2 h-8 w-8 text-gray-300" />
+            <p className="text-sm text-gray-500">Nenhuma mensagem ainda.</p>
+            <p className="text-xs text-gray-400">Envie a primeira ou aguarde o cliente escrever.</p>
+          </div>
         ) : (
           messages.map((m, i) => {
             const out = m.direction === "OUT";
             return (
               <div key={m.id ?? i} className={`flex ${out ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                  className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                     out
-                      ? "rounded-br-sm bg-green-500 text-white"
-                      : "rounded-bl-sm bg-white text-gray-800 border border-gray-200"
+                      ? "rounded-br-sm bg-[#d9fdd3] text-gray-800"
+                      : "rounded-bl-sm border border-gray-200 bg-white text-gray-800"
                   }`}
                 >
+                  {out && m.authorName && (
+                    <p className="mb-0.5 text-[10px] font-semibold text-green-700">{m.authorName}</p>
+                  )}
                   <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                  <p className={`mt-1 text-[10px] ${out ? "text-green-50/80" : "text-gray-400"}`}>
+                  <p className="mt-1 text-right text-[10px] text-gray-400">
                     {formatMsgTime(m.createdAt)}
                     {out && m.status ? ` · ${m.status}` : ""}
                   </p>
@@ -206,7 +206,7 @@ function Conversation({ card, stageTemplate }: { card: CrmCard; stageTemplate: s
       </div>
 
       {/* Composer */}
-      <div className="mt-2">
+      <div className="border-t bg-white p-3">
         {stageTemplate && (
           <button
             type="button"
@@ -224,13 +224,13 @@ function Conversation({ card, stageTemplate }: { card: CrmCard; stageTemplate: s
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
             }}
             rows={2}
-            placeholder="Escreva uma mensagem..."
+            placeholder="Escreva uma mensagem... (Enter envia, Shift+Enter quebra linha)"
             className="flex-1 resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
           />
           <button
             onClick={send}
             disabled={sending || !text.trim()}
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
             title="Enviar"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -366,139 +366,171 @@ function CardPanel({
   // Allow moving to pós-venda when on FECHADO
   const isOnFechado = card.stage === "FECHADO" && card.tab === "NOVOS";
 
+  const phone = cardPhone(card);
+  const email = card.client?.email ?? card.leadEmail;
+
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-40 flex items-stretch justify-center bg-black/50 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
       <div
-        className="h-full w-full max-w-sm overflow-y-auto bg-white shadow-2xl"
+        className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[92vh] sm:flex-row sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3">
-          <h3 className="font-semibold text-gray-900 truncate">{cardDisplayName(card)}</h3>
-          <button onClick={onClose} className="ml-2 rounded p-1 hover:bg-gray-100">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-5 p-4">
-          {/* Contact info */}
-          <div className="space-y-2 text-sm">
-            {(card.client?.email ?? card.leadEmail) && (
-              <div className="flex items-center gap-2 text-gray-600">
-                <Mail className="h-3.5 w-3.5 flex-shrink-0" />
-                {card.client?.email ?? card.leadEmail}
-              </div>
-            )}
-            {cardPhone(card) && (
-              <div className="flex items-center gap-2 text-gray-600">
-                <Phone className="h-3.5 w-3.5 flex-shrink-0" />
-                {cardPhone(card)}
-              </div>
-            )}
-            {card.leadSource && (
-              <div className="flex items-center gap-2 text-gray-500">
-                <User className="h-3.5 w-3.5 flex-shrink-0" />
-                Origem: {card.leadSource}
-              </div>
-            )}
-          </div>
-
-          {/* Stage navigation */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Etapa atual</p>
-            <select
-              value={card.stage}
-              onChange={(e) => moveStage(e.target.value)}
-              disabled={saving}
-              className="mb-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
-            >
-              <optgroup label="Novos clientes">
-                {NOVOS_STAGES.map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Pós-venda">
-                {POS_VENDA_STAGES.map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
-                ))}
-              </optgroup>
-            </select>
-            <p className="mb-3 text-xs text-gray-400">
-              Escolha qualquer etapa — inclusive mover direto para o pós-venda.
-            </p>
-            <div className="flex gap-2">
-              {prevStage && (
-                <button
-                  onClick={() => moveStage(prevStage.key)}
-                  disabled={saving}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  {prevStage.label}
-                </button>
-              )}
-              {nextStage && !isOnFechado && (
-                <button
-                  onClick={() => moveStage(nextStage.key)}
-                  disabled={saving}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {nextStage.label}
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {isOnFechado && (
-                <button
-                  onClick={() => moveStage("FECHADO")}
-                  disabled={saving}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  Mover para Pós-Venda →
-                </button>
+        {/* ── Coluna esquerda: dados do lead ── */}
+        <aside className="flex max-h-[38vh] w-full flex-shrink-0 flex-col overflow-y-auto border-b bg-gray-50 sm:max-h-none sm:w-80 sm:border-b-0 sm:border-r">
+          <div className="flex items-start justify-between gap-2 border-b bg-white px-4 py-3">
+            <div className="min-w-0">
+              <h3 className="truncate font-semibold text-gray-900">{cardDisplayName(card)}</h3>
+              {card.leadSource && (
+                <span className="mt-1 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+                  {card.leadSource}
+                </span>
               )}
             </div>
-          </div>
-
-          {/* WhatsApp — conversa (inbox) */}
-          {zapiConfigured && cardPhone(card) && (
-            <Conversation card={card} stageTemplate={stageTemplate} />
-          )}
-          {zapiConfigured && !cardPhone(card) && (
-            <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-400">
-              Sem número de WhatsApp neste card — adicione um telefone para conversar.
-            </p>
-          )}
-
-          {/* Notes */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <StickyNote className="inline h-3.5 w-3.5 mr-1" />
-              Anotações
-            </p>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              placeholder="Anotações sobre este lead..."
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-            <button
-              onClick={saveNotes}
-              disabled={saving}
-              className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? "Salvando..." : "Salvar anotações"}
+            <button onClick={onClose} className="rounded p-1 hover:bg-gray-100 sm:hidden">
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Delete */}
-          <button
-            onClick={handleDelete}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
-          >
-            <Trash2 className="h-4 w-4" />
-            Remover do CRM
-          </button>
-        </div>
+          <div className="space-y-5 p-4">
+            {/* Contato */}
+            <div className="space-y-2 text-sm">
+              {email && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{email}</span>
+                </div>
+              )}
+              {phone && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                  {phone}
+                </div>
+              )}
+            </div>
+
+            {/* Etapa */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Etapa atual</p>
+              <select
+                value={card.stage}
+                onChange={(e) => moveStage(e.target.value)}
+                disabled={saving}
+                className="mb-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
+              >
+                <optgroup label="Novos clientes">
+                  {NOVOS_STAGES.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Pós-venda">
+                  {POS_VENDA_STAGES.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </optgroup>
+              </select>
+              <div className="flex gap-2">
+                {prevStage && (
+                  <button
+                    onClick={() => moveStage(prevStage.key)}
+                    disabled={saving}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    {prevStage.label}
+                  </button>
+                )}
+                {nextStage && !isOnFechado && (
+                  <button
+                    onClick={() => moveStage(nextStage.key)}
+                    disabled={saving}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {nextStage.label}
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {isOnFechado && (
+                  <button
+                    onClick={() => moveStage("FECHADO")}
+                    disabled={saving}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-2 py-2 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Mover para Pós-Venda →
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Anotações */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <StickyNote className="inline h-3.5 w-3.5 mr-1" />
+                Anotações
+              </p>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={4}
+                placeholder="Anotações sobre este lead..."
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+              <button
+                onClick={saveNotes}
+                disabled={saving}
+                className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? "Salvando..." : "Salvar anotações"}
+              </button>
+            </div>
+
+            {/* Remover */}
+            <button
+              onClick={handleDelete}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              Remover do CRM
+            </button>
+          </div>
+        </aside>
+
+        {/* ── Coluna direita: conversa ── */}
+        <section className="flex min-h-0 flex-1 flex-col">
+          <div className="flex items-center justify-between gap-2 border-b bg-white px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700">
+                <MessageCircle className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-900">{cardDisplayName(card)}</p>
+                {phone && <p className="truncate text-xs text-gray-500">{phone}</p>}
+              </div>
+            </div>
+            <button onClick={onClose} className="hidden rounded p-1 hover:bg-gray-100 sm:block">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {zapiConfigured && phone ? (
+            <Conversation card={card} stageTemplate={stageTemplate} />
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+              <MessageCircle className="mb-2 h-10 w-10 text-gray-300" />
+              {!zapiConfigured ? (
+                <p className="max-w-xs text-sm text-gray-500">
+                  Conecte o WhatsApp (Datafy) em Configurações → Integrações para conversar por aqui.
+                </p>
+              ) : (
+                <p className="max-w-xs text-sm text-gray-500">
+                  Este card não tem número de WhatsApp. Adicione um telefone ao lead para conversar.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
