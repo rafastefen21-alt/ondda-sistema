@@ -4,11 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import {
   Plus, X, ChevronRight, ChevronLeft, Trash2,
   Phone, Mail, MessageCircle, StickyNote, Send, Loader2,
+  FileText, Download, ShoppingCart, Link2, Search, ChevronDown, ExternalLink, Landmark,
 } from "lucide-react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatCurrency } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -242,6 +245,340 @@ function Conversation({ card, stageTemplate }: { card: CrmCard; stageTemplate: s
   );
 }
 
+// ─── Lead history (pedidos / NFs / boletos) ───────────────────────────────────
+
+interface SummaryClient {
+  id: string; name: string | null; nomeFantasia: string | null; email: string;
+  phone: string | null; cnpj: string | null; cpf: string | null;
+  city: string | null; state: string | null; prazoBoletoDias: number | null;
+}
+interface SummaryInvoice {
+  id: string; number: string | null; status: string;
+  pdfUrl: string | null; focusNfeRef: string | null; issuedAt: string | null;
+}
+interface SummaryPayment {
+  id: string; amount: number; method: string; status: string;
+  dueDate: string; paidAt: string | null;
+  linhaDigitavel: string | null; boletoPdfUrl: string | null; itauNossoNumero: string | null;
+}
+interface SummaryOrder {
+  id: string; status: string; paymentMethod: string | null; createdAt: string;
+  scheduledDeliveryDate: string | null; total: number;
+  items: { name: string; unit: string | null; quantity: number; unitPrice: number }[];
+  invoices: SummaryInvoice[];
+  payments: SummaryPayment[];
+}
+interface ClientResult {
+  id: string; name: string | null; nomeFantasia: string | null;
+  email: string; phone: string | null; cnpj: string | null;
+}
+
+function prettyStatus(s: string) {
+  return s.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+}
+function statusClass(s: string) {
+  const up = s.toUpperCase();
+  if (/PAGO|EMITID|ENTREGUE|APROVAD/.test(up)) return "bg-green-100 text-green-700";
+  if (/CANCEL|ERRO|VENCID/.test(up)) return "bg-red-100 text-red-600";
+  return "bg-amber-100 text-amber-700";
+}
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+
+function ClientLinker({ card, onLinked }: { card: CrmCard; onLinked: (updated: CrmCard) => void }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<ClientResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [linking, setLinking] = useState(false);
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setResults([]); return; }
+    setSearching(true);
+    const t = setTimeout(() => {
+      fetch(`/api/crm/client-search?q=${encodeURIComponent(q.trim())}`)
+        .then((r) => r.json())
+        .then((d) => setResults(Array.isArray(d.clients) ? d.clients : []))
+        .catch(() => {})
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  async function link(clientId: string) {
+    setLinking(true);
+    const res = await fetch(`/api/crm/cards/${card.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId }),
+    });
+    if (res.ok) onLinked(await res.json());
+    setLinking(false);
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-gray-300 bg-white p-3">
+      <p className="mb-1 text-sm font-medium text-gray-700">Vincular a um cliente</p>
+      <p className="mb-2 text-xs text-gray-400">
+        Ligue este lead a um cliente cadastrado para ver pedidos, NFs e boletos.
+      </p>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por nome, CNPJ, telefone..."
+          className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      {searching && <p className="mt-2 text-xs text-gray-400">Buscando...</p>}
+      {results.length > 0 && (
+        <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+          {results.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => link(c.id)}
+              disabled={linking}
+              className="flex w-full items-center gap-2 rounded-md border border-gray-100 px-2 py-1.5 text-left text-xs hover:border-blue-200 hover:bg-blue-50 disabled:opacity-50"
+            >
+              <Link2 className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-gray-800">
+                  {c.nomeFantasia ?? c.name ?? c.email}
+                </span>
+                {(c.cnpj || c.phone) && (
+                  <span className="block truncate text-gray-400">{c.cnpj ?? c.phone}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeadHistory({ card, onLinked }: { card: CrmCard; onLinked: (updated: CrmCard) => void }) {
+  const [summary, setSummary] = useState<{ client: SummaryClient | null; orders: SummaryOrder[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetch(`/api/crm/cards/${card.id}/summary`)
+      .then((r) => r.json())
+      .then((d) => { if (active) setSummary(d); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [card.id, card.clientId]);
+
+  if (loading) {
+    return (
+      <div className="py-4 text-center">
+        <Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (!summary?.client) {
+    return <ClientLinker card={card} onLinked={onLinked} />;
+  }
+
+  const c = summary.client;
+  const orders = summary.orders;
+
+  async function unlink() {
+    if (!confirm("Desvincular este cliente do lead?")) return;
+    const res = await fetch(`/api/crm/cards/${card.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId: null }),
+    });
+    if (res.ok) onLinked(await res.json());
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Cliente vinculado */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-gray-900">
+              {c.nomeFantasia ?? c.name ?? c.email}
+            </p>
+            {c.cnpj && <p className="text-xs text-gray-500">CNPJ: {c.cnpj}</p>}
+            {(c.city || c.state) && (
+              <p className="text-xs text-gray-500">{[c.city, c.state].filter(Boolean).join(" / ")}</p>
+            )}
+            {c.prazoBoletoDias != null && (
+              <p className="text-xs text-gray-500">Prazo boleto: {c.prazoBoletoDias} dias</p>
+            )}
+          </div>
+          <button onClick={unlink} title="Desvincular cliente" className="text-xs text-gray-400 hover:text-red-500">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Pedidos */}
+      <div>
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <ShoppingCart className="h-3.5 w-3.5" />
+          Pedidos ({orders.length})
+        </p>
+        {orders.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-center text-xs text-gray-400">
+            Nenhum pedido deste cliente.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {orders.map((o) => {
+              const open = expanded === o.id;
+              return (
+                <div key={o.id} className="overflow-hidden rounded-lg border border-gray-200">
+                  <button
+                    onClick={() => setExpanded(open ? null : o.id)}
+                    className="flex w-full items-center justify-between gap-2 bg-white px-3 py-2 text-left hover:bg-gray-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-800">
+                        #{o.id.slice(-6).toUpperCase()} · {fmtDate(o.createdAt)}
+                      </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusClass(o.status)}`}>
+                          {prettyStatus(o.status)}
+                        </span>
+                        {o.invoices.length > 0 && (
+                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
+                            {o.invoices.length} NF
+                          </span>
+                        )}
+                        {o.payments.length > 0 && (
+                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
+                            {o.payments.length} boleto{o.payments.length > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-1">
+                      <span className="text-xs font-semibold text-gray-900">{formatCurrency(o.total)}</span>
+                      <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition ${open ? "rotate-180" : ""}`} />
+                    </div>
+                  </button>
+
+                  {open && (
+                    <div className="space-y-3 border-t bg-gray-50 px-3 py-2.5">
+                      {/* Itens */}
+                      <div>
+                        <p className="mb-1 text-[10px] font-semibold uppercase text-gray-400">Itens</p>
+                        <ul className="space-y-0.5">
+                          {o.items.map((it, idx) => (
+                            <li key={idx} className="flex justify-between gap-2 text-xs text-gray-600">
+                              <span className="min-w-0 truncate">
+                                {it.quantity}× {it.name}
+                              </span>
+                              <span className="flex-shrink-0 text-gray-500">
+                                {formatCurrency(it.quantity * it.unitPrice)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* NFs */}
+                      {o.invoices.length > 0 && (
+                        <div>
+                          <p className="mb-1 text-[10px] font-semibold uppercase text-gray-400">Notas fiscais</p>
+                          <div className="space-y-1">
+                            {o.invoices.map((inv) => (
+                              <div key={inv.id} className="flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1.5 text-xs">
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <FileText className="h-3.5 w-3.5 flex-shrink-0 text-green-600" />
+                                  <span className="truncate">NF {inv.number ?? "—"}</span>
+                                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${statusClass(inv.status)}`}>
+                                    {prettyStatus(inv.status)}
+                                  </span>
+                                </span>
+                                {(inv.pdfUrl || inv.focusNfeRef) && (
+                                  <a
+                                    href={inv.pdfUrl ?? `/api/nfe/${inv.id}/danfe`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Baixar DANFE"
+                                    className="flex-shrink-0 text-gray-400 hover:text-gray-700"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Boletos */}
+                      {o.payments.length > 0 && (
+                        <div>
+                          <p className="mb-1 text-[10px] font-semibold uppercase text-gray-400">Boletos / pagamentos</p>
+                          <div className="space-y-1">
+                            {o.payments.map((p) => (
+                              <div key={p.id} className="rounded-md bg-white px-2 py-1.5 text-xs">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="flex min-w-0 items-center gap-1.5">
+                                    <Landmark className="h-3.5 w-3.5 flex-shrink-0 text-orange-500" />
+                                    <span className="truncate">{formatCurrency(p.amount)}</span>
+                                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${statusClass(p.status)}`}>
+                                      {prettyStatus(p.status)}
+                                    </span>
+                                  </span>
+                                  {p.boletoPdfUrl || p.linhaDigitavel ? (
+                                    <a
+                                      href={`/api/pagamentos/${p.id}/boleto`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Baixar boleto"
+                                      className="flex-shrink-0 text-gray-400 hover:text-gray-700"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </a>
+                                  ) : null}
+                                </div>
+                                <p className="mt-0.5 text-[10px] text-gray-400">
+                                  Vencimento {fmtDate(p.dueDate)}
+                                  {p.paidAt ? ` · pago ${fmtDate(p.paidAt)}` : ""}
+                                </p>
+                                {p.linhaDigitavel && (
+                                  <p className="mt-0.5 break-all font-mono text-[10px] text-gray-500">
+                                    {p.linhaDigitavel}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Link
+                        href={`/pedidos/${o.id}`}
+                        className="flex items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Abrir pedido completo
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── New card form ─────────────────────────────────────────────────────────────
 
 function NewCardForm({ onAdd, onClose }: { onAdd: (card: CrmCard) => void; onClose: () => void }) {
@@ -463,6 +800,9 @@ function CardPanel({
                 )}
               </div>
             </div>
+
+            {/* Cliente, pedidos, NFs e boletos */}
+            <LeadHistory card={card} onLinked={onUpdate} />
 
             {/* Anotações */}
             <div>

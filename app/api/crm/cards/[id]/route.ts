@@ -13,6 +13,7 @@ const patchSchema = z.object({
   leadPhone:  z.string().optional(),
   leadEmail:  z.string().optional(),
   leadSource: z.string().optional(),
+  clientId:   z.string().nullable().optional(),
 });
 
 export async function PATCH(
@@ -42,6 +43,24 @@ export async function PATCH(
   if (parsed.data.leadPhone !== undefined) updateData.leadPhone = parsed.data.leadPhone || null;
   if (parsed.data.leadEmail !== undefined) updateData.leadEmail = parsed.data.leadEmail || null;
   if (parsed.data.leadSource !== undefined) updateData.leadSource = parsed.data.leadSource || null;
+
+  // Vincular / desvincular cliente cadastrado
+  if (parsed.data.clientId !== undefined) {
+    const newClientId = parsed.data.clientId || null;
+    if (newClientId) {
+      const client = await prisma.user.findFirst({
+        where: { id: newClientId, tenantId, role: "CLIENTE" },
+        select: { id: true },
+      });
+      if (!client) return NextResponse.json({ error: "Cliente inválido" }, { status: 400 });
+    }
+    updateData.clientId = newClientId;
+    // Mantém a conversa de WhatsApp em sincronia com o cliente vinculado
+    await prisma.waConversation.updateMany({
+      where: { crmCardId: id },
+      data: { clientId: newClientId },
+    });
+  }
 
   if (parsed.data.stage) {
     const newStage = parsed.data.stage;
