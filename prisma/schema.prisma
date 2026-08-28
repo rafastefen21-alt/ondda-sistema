@@ -403,6 +403,9 @@ model Payment {
   // Confirmação de envio do boleto ao cliente
   boletoEmailEnviadoEm    DateTime?
   boletoWhatsappEnviadoEm DateTime?
+  // Trava de emissão (idempotência): marca quando um boleto está sendo emitido,
+  // para evitar boletos duplicados em chamadas concorrentes.
+  boletoEmitindoEm        DateTime?
   status       PaymentStatus @default(PENDENTE)
   notes        String?
   createdAt    DateTime      @default(now())

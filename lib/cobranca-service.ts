@@ -51,6 +51,42 @@ export async function emitirBoletoPagamento(
   if (payment.status === "PAGO") throw new Error("Este pagamento já está quitado.");
   if (payment.itauNossoNumero) throw new Error("Este pagamento já tem boleto Itaú gerado.");
 
+  // ── Trava atômica de idempotência ──
+  // Reivindica a emissão num único UPDATE condicional. Se outra chamada já
+  // reivindicou (ou o boleto já existe), count === 0 e não emitimos de novo —
+  // isso evita boletos duplicados quando aprovação e autorização da NF (ou
+  // múltiplas consultas de status) disparam ao mesmo tempo.
+  // Uma reivindicação "presa" há mais de 2 min é considerada abandonada e pode
+  // ser retomada (ex.: processo anterior morreu antes de concluir).
+  const STALE_MS = 2 * 60 * 1000;
+  const claim = await prisma.payment.updateMany({
+    where: {
+      id: paymentId,
+      tenantId,
+      itauNossoNumero: null,
+      OR: [
+        { boletoEmitindoEm: null },
+        { boletoEmitindoEm: { lt: new Date(Date.now() - STALE_MS) } },
+      ],
+    },
+    data: { boletoEmitindoEm: new Date() },
+  });
+  if (claim.count === 0) {
+    // Já está sendo emitido por outro processo, ou já foi emitido nesse meio-tempo.
+    const cur = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: { itauNossoNumero: true, linhaDigitavel: true, codigoBarras: true },
+    });
+    if (cur?.itauNossoNumero) {
+      return {
+        nossoNumero: cur.itauNossoNumero,
+        linhaDigitavel: cur.linhaDigitavel,
+        codigoBarras: cur.codigoBarras,
+      };
+    }
+    throw new Error("Boleto já está sendo emitido para este pagamento.");
+  }
+
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
@@ -82,41 +118,51 @@ export async function emitirBoletoPagamento(
     }
   }
 
-  const nossoNumero = await proximoNossoNumero(tenantId);
+  let boleto: Awaited<ReturnType<typeof emitirBoleto>>;
+  try {
+    const nossoNumero = await proximoNossoNumero(tenantId);
 
-  const boleto = await emitirBoleto({
-    tenantId,
-    credenciais: {
-      clientId:     tenant.itauClientId!,
-      clientSecret: tenant.itauClientSecret!,
-      certificado:  tenant.itauCertificado!,
-      chavePrivada: tenant.itauChavePrivada!,
-      agencia:      tenant.itauAgencia!,
-      conta:        tenant.itauConta!,
-      contaDac:     tenant.itauContaDac!,
-      ambiente:     tenant.itauAmbiente ?? "Validacao",
-    },
-    nomeBeneficiario: tenant.name,
-    cnpjBeneficiario: tenant.cnpj,
-    pagador: {
-      nome:        client.name ?? client.email,
-      cnpj:        client.cnpj,
-      cpf:         client.cpf,
-      logradouro:  client.logradouro,
-      numero:      client.numero,
-      complemento: client.complemento,
-      bairro:      client.bairro,
-      cidade:      client.city,
-      uf:          client.state,
-      cep:         client.cep,
-      email:       client.email,
-    },
-    valor:       total,
-    vencimento:  dueDate,
-    nossoNumero,
-    seuNumero:   payment.orderId.slice(-10).toUpperCase(),
-    mensagens:   opts.nfNumero ? [`Ref. NF-e no ${opts.nfNumero}`] : undefined,
-  });
+    boleto = await emitirBoleto({
+      tenantId,
+      credenciais: {
+        clientId:     tenant.itauClientId!,
+        clientSecret: tenant.itauClientSecret!,
+        certificado:  tenant.itauCertificado!,
+        chavePrivada: tenant.itauChavePrivada!,
+        agencia:      tenant.itauAgencia!,
+        conta:        tenant.itauConta!,
+        contaDac:     tenant.itauContaDac!,
+        ambiente:     tenant.itauAmbiente ?? "Validacao",
+      },
+      nomeBeneficiario: tenant.name,
+      cnpjBeneficiario: tenant.cnpj,
+      pagador: {
+        nome:        client.name ?? client.email,
+        cnpj:        client.cnpj,
+        cpf:         client.cpf,
+        logradouro:  client.logradouro,
+        numero:      client.numero,
+        complemento: client.complemento,
+        bairro:      client.bairro,
+        cidade:      client.city,
+        uf:          client.state,
+        cep:         client.cep,
+        email:       client.email,
+      },
+      valor:       total,
+      vencimento:  dueDate,
+      nossoNumero,
+      seuNumero:   payment.orderId.slice(-10).toUpperCase(),
+      mensagens:   opts.nfNumero ? [`Ref. NF-e no ${opts.nfNumero}`] : undefined,
+    });
+  } catch (err) {
+    // Libera a trava para permitir nova tentativa (não emitiu de fato).
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { boletoEmitindoEm: null },
+    }).catch(() => {});
+    throw err;
+  }
 
   await prisma.payment.update({
     where: { id: payment.id },
@@ -125,6 +171,7 @@ export async function emitirBoletoPagamento(
       itauIdBoleto:    boleto.idBoleto,
       linhaDigitavel:  boleto.linhaDigitavel,
       codigoBarras:    boleto.codigoBarras,
+      boletoEmitindoEm: null,
     },
   });
 
@@ -223,6 +270,7 @@ export async function reemitirBoletoPagamento(
       data: {
         itauNossoNumero: null, itauIdBoleto: null, linhaDigitavel: null,
         codigoBarras: null, boletoEmailEnviadoEm: null, boletoWhatsappEnviadoEm: null,
+        boletoEmitindoEm: null,
       },
     });
   }
