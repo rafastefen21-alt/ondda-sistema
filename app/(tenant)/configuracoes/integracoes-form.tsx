@@ -22,6 +22,26 @@ interface MpAccount {
   siteId:   string | null;
 }
 
+interface ConcResultado {
+  nossoNumero: string;
+  // consulta
+  encontrado?: boolean;
+  situacao?: string | null;
+  vencimento?: string | null;
+  valor?: string | null;
+  motivoBaixa?: string | null;
+  erro?: string | null;
+  // baixa
+  ok?: boolean;
+  pulado?: boolean;
+  status?: number;
+  mensagem?: string | null;
+  vinculo?: {
+    paymentId: string; pagamentoStatus: string; valor: number;
+    orderId: string; pedidoStatus: string; cliente: string | null;
+  } | null;
+}
+
 interface Props {
   initial: {
     mpPublicKey:    string | null;
@@ -138,6 +158,45 @@ export function IntegracoesForm({ initial }: Props) {
   const [loadingItau,      setLoadingItau]      = useState(false);
   const [successItau,      setSuccessItau]      = useState(false);
   const [errorItau,        setErrorItau]        = useState("");
+
+  // Conciliação de boletos (consultar / baixar por Nosso Número)
+  const [concNumeros,   setConcNumeros]   = useState("");
+  const [concForcar,    setConcForcar]    = useState(false);
+  const [concLoading,   setConcLoading]   = useState<"consultar" | "baixar" | null>(null);
+  const [concErro,      setConcErro]      = useState("");
+  const [concResultados, setConcResultados] = useState<ConcResultado[]>([]);
+
+  async function conciliarBoletos(acao: "consultar" | "baixar") {
+    const nossoNumeros = concNumeros.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+    if (nossoNumeros.length === 0) {
+      setConcErro("Informe ao menos um Nosso Número (um por linha ou separados por vírgula).");
+      return;
+    }
+    if (acao === "baixar" && !confirm(
+      `Baixar ${nossoNumeros.length} boleto(s) no Itaú? Isso cancela o boleto no banco e não pode ser desfeito.`,
+    )) return;
+
+    setConcLoading(acao);
+    setConcErro("");
+    setConcResultados([]);
+    try {
+      const res  = await fetch("/api/configuracoes/itau-boletos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao, nossoNumeros, forcar: concForcar }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setConcErro(data.error ?? "Falha ao falar com o Itaú.");
+        return;
+      }
+      setConcResultados(data.resultados ?? []);
+    } catch {
+      setConcErro("Erro de conexão.");
+    } finally {
+      setConcLoading(null);
+    }
+  }
 
   // id_beneficiario = Agência(4) + "00" + Conta(5) + DAC(1)
   const idBeneficiario =
@@ -714,6 +773,97 @@ export function IntegracoesForm({ initial }: Props) {
               </div>
             )}
           </form>
+
+          {/* ── Conciliação de boletos ── */}
+          {itauConfigured && (
+            <div className="mt-6 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Conciliação de boletos</p>
+                <p className="text-xs text-gray-500">
+                  Consulte a situação no Itaú ou baixe (cancele) boletos pelo Nosso Número —
+                  útil para boletos que ficaram no banco após uma reemissão ou um pedido cancelado.
+                  Um número por linha ou separados por vírgula (máx. 40 por vez).
+                </p>
+              </div>
+              <textarea
+                value={concNumeros}
+                onChange={(e) => setConcNumeros(e.target.value)}
+                rows={3}
+                placeholder={"00000337\n00000338\n345"}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+              />
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={concForcar}
+                  onChange={(e) => setConcForcar(e.target.checked)}
+                />
+                Forçar baixa mesmo se o número for o boleto ativo de um pedido em andamento
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!!concLoading}
+                  onClick={() => conciliarBoletos("consultar")}
+                >
+                  {concLoading === "consultar"
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Consultando...</>
+                    : "Consultar situação no Itaú"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!!concLoading || itauAmbiente !== "Efetivacao"}
+                  onClick={() => conciliarBoletos("baixar")}
+                  title={itauAmbiente !== "Efetivacao" ? "Só em ambiente de Efetivação" : "Baixar (cancelar) no Itaú"}
+                >
+                  {concLoading === "baixar"
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Baixando...</>
+                    : "Baixar boletos no Itaú"}
+                </Button>
+              </div>
+              {concErro && (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{concErro}</p>
+              )}
+              {concResultados.length > 0 && (
+                <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-100 text-left text-gray-600">
+                      <tr>
+                        <th className="px-2 py-1.5 font-medium">Nosso Nº</th>
+                        <th className="px-2 py-1.5 font-medium">Itaú</th>
+                        <th className="px-2 py-1.5 font-medium">No sistema</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {concResultados.map((r) => {
+                        const itau = r.erro
+                          ? `Erro: ${r.erro}`
+                          : r.ok !== undefined
+                            ? (r.ok ? "Baixado ✔" : r.pulado ? `Pulado — ${r.mensagem ?? ""}` : `Recusado (HTTP ${r.status ?? "?"}) ${r.mensagem ?? ""}`)
+                            : r.encontrado
+                              ? `${r.situacao ?? "?"}${r.vencimento ? ` · venc. ${r.vencimento}` : ""}${r.valor ? ` · ${r.valor}` : ""}${r.motivoBaixa ? ` · ${r.motivoBaixa}` : ""}`
+                              : "Não encontrado";
+                        const ok = r.erro ? false : r.ok !== undefined ? r.ok : (r.situacao ?? "").toUpperCase().includes("EM ABERTO") ? false : true;
+                        return (
+                          <tr key={r.nossoNumero} className="border-t border-gray-100">
+                            <td className="px-2 py-1.5 font-mono">{r.nossoNumero}</td>
+                            <td className={`px-2 py-1.5 ${ok ? "text-gray-700" : "text-amber-700"}`}>{itau}</td>
+                            <td className="px-2 py-1.5 text-gray-600">
+                              {r.vinculo
+                                ? `${r.vinculo.cliente ?? "—"} · pagto ${r.vinculo.pagamentoStatus} · pedido ${r.vinculo.pedidoStatus} · R$ ${r.vinculo.valor.toFixed(2)}`
+                                : "sem pagamento vinculado (órfão)"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

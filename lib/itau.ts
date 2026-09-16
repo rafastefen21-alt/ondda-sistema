@@ -59,6 +59,21 @@ export function montarIdBeneficiario(
 }
 
 /**
+ * id_boleto usado nas instruções da API v2 (baixa, alteração de vencimento):
+ * id_beneficiario(12) + carteira(3) + nosso número(8) = 23 dígitos.
+ * Não depende de nada devolvido pelo Itaú — dá para baixar qualquer boleto
+ * emitido por nós só com o Nosso Número.
+ */
+export function montarIdBoleto(
+  c: Pick<CredenciaisItau, "agencia" | "conta" | "contaDac">,
+  nossoNumero: string,
+): string {
+  const idBeneficiario = montarIdBeneficiario(c.agencia, c.conta, c.contaDac);
+  if (!idBeneficiario) throw new Error("Agência/conta/DAC do Itaú não configurados.");
+  return `${idBeneficiario}${ITAU_CARTEIRA}${nossoNumero.padStart(8, "0")}`;
+}
+
+/**
  * Nosso Número da carteira 109 é responsabilidade do emissor: precisa ser
  * crescente e nunca repetir. Formata o sequencial em 8 dígitos.
  */
@@ -146,6 +161,35 @@ interface RespostaHttp {
 }
 
 /**
+ * Carrega as credenciais do Itaú do tenant. Devolve null se a integração não
+ * estiver completa (certificado, chave, secret, agência, conta e DAC).
+ */
+export async function carregarCredenciaisItau(tenantId: string): Promise<CredenciaisItau | null> {
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      itauClientId: true, itauClientSecret: true, itauCertificado: true,
+      itauChavePrivada: true, itauAgencia: true, itauConta: true,
+      itauContaDac: true, itauAmbiente: true,
+    },
+  });
+  if (!t?.itauClientId || !t.itauClientSecret || !t.itauCertificado ||
+      !t.itauChavePrivada || !t.itauAgencia || !t.itauConta || !t.itauContaDac) {
+    return null;
+  }
+  return {
+    clientId:     t.itauClientId,
+    clientSecret: t.itauClientSecret,
+    certificado:  t.itauCertificado,
+    chavePrivada: t.itauChavePrivada,
+    agencia:      t.itauAgencia,
+    conta:        t.itauConta,
+    contaDac:     t.itauContaDac,
+    ambiente:     t.itauAmbiente ?? "Validacao",
+  };
+}
+
+/**
  * Requisição HTTPS com mTLS (certificado + chave do Itaú).
  * Usa node:https porque o fetch global não aceita certificado de cliente.
  */
@@ -166,6 +210,10 @@ function requisicaoMtls(
         headers: opcoes.headers,
         cert,
         key,
+        // Sem timeout, uma chamada pendurada estoura o limite da função na
+        // Vercel e deixa a trava de emissão "presa" — depois de 2 min ela é
+        // retomada e o boleto pode sair em dobro. Falha rápido em vez disso.
+        timeout: 30_000,
       },
       (res) => {
         let bruto = "";
@@ -177,6 +225,7 @@ function requisicaoMtls(
         });
       },
     );
+    req.on("timeout", () => req.destroy(new Error(`Itaú não respondeu em 30s (${u.pathname})`)));
     req.on("error", reject);
     if (opcoes.body) req.write(opcoes.body);
     req.end();
@@ -375,7 +424,9 @@ export async function emitirBoleto(params: {
     throw new Error(`Itaú recusou o boleto (HTTP ${status}): ${msg}`);
   }
 
-  // A resposta traz os dados do título em dado_boleto.dados_individuais_boleto[0]
+  // A resposta traz os dados do título em dado_boleto.dados_individuais_boleto[0].
+  // O identificador do título vem em "id_boleto_individual" (não há "id_boleto"
+  // na raiz da resposta de emissão — esse só aparece na consulta).
   const resp = data as {
     data?: Record<string, unknown>;
     dado_boleto?: { dados_individuais_boleto?: Array<Record<string, string>> };
@@ -388,7 +439,9 @@ export async function emitirBoleto(params: {
     nossoNumero:    individual.numero_nosso_numero ?? params.nossoNumero,
     linhaDigitavel: individual.numero_linha_digitavel ?? null,
     codigoBarras:   individual.codigo_barras ?? null,
-    idBoleto:       (raiz.id_boleto as string | undefined) ?? null,
+    idBoleto:       individual.id_boleto_individual
+                    ?? (raiz.id_boleto as string | undefined)
+                    ?? null,
   };
 }
 
@@ -469,17 +522,90 @@ export async function consultarWebhookItau(params: {
   );
 }
 
-/** Baixa (cancela) um boleto registrado no Itaú, pelo id do boleto. */
-export async function baixarBoleto(
-  idBoleto: string,
-  tenantId: string,
-  c: CredenciaisItau,
-): Promise<{ status: number; data: unknown }> {
-  const token = await obterAccessToken(tenantId, c);
-  return requisicaoMtls(
-    `${ITAU_URLS.boletos}/${encodeURIComponent(idBoleto)}/baixa`,
+export interface ResultadoBaixa {
+  ok:     boolean;
+  status: number;
+  /** Mensagem legível do Itaú (em caso de recusa). */
+  mensagem: string | null;
+  data:   unknown;
+}
+
+/**
+ * Baixa (cancela) um boleto registrado no Itaú pelo Nosso Número.
+ *
+ * PATCH /cash_management/v2/boletos/{id_beneficiario}{carteira}{nosso_numero}/baixa
+ * com corpo "{}" — mesmo contrato usado pelo ACBr. Não lança em recusa do
+ * Itaú: devolve ok=false com a mensagem, para o chamador decidir.
+ */
+export async function baixarBoleto(params: {
+  tenantId:    string;
+  credenciais: CredenciaisItau;
+  nossoNumero: string;
+}): Promise<ResultadoBaixa> {
+  const { credenciais: c } = params;
+  const idBoleto = montarIdBoleto(c, params.nossoNumero);
+  const token = await obterAccessToken(params.tenantId, c);
+  const corpo = "{}";
+
+  const { status, data } = await requisicaoMtls(
+    `${ITAU_URLS.boletos}/${idBoleto}/baixa`,
     {
       method: "PATCH",
+      headers: {
+        "Content-Type":         "application/json",
+        "Content-Length":       Buffer.byteLength(corpo).toString(),
+        Authorization:          `Bearer ${token}`,
+        "x-itau-apikey":        c.clientId,
+        "x-itau-correlationID": randomUUID(),
+      },
+      body: corpo,
+    },
+    c.certificado,
+    c.chavePrivada,
+  );
+
+  const ok = status >= 200 && status < 300;
+  return { ok, status, mensagem: ok ? null : extrairErro(data), data };
+}
+
+export interface SituacaoBoleto {
+  nossoNumero: string;
+  encontrado:  boolean;
+  situacao:    string | null;   // ex.: "EM ABERTO", "PAGO", "BAIXADO"
+  vencimento:  string | null;
+  valor:       string | null;
+  motivoBaixa: string | null;
+  status:      number;          // HTTP da consulta
+  erro:        string | null;
+}
+
+/**
+ * Consulta a situação de um boleto no Itaú pelo Nosso Número.
+ *
+ * GET boletoscash/v2/boletos?id_beneficiario=..&codigo_carteira=109&nosso_numero=..&view=specific
+ */
+export async function consultarBoleto(params: {
+  tenantId:    string;
+  credenciais: CredenciaisItau;
+  nossoNumero: string;
+}): Promise<SituacaoBoleto> {
+  const { credenciais: c } = params;
+  const idBeneficiario = montarIdBeneficiario(c.agencia, c.conta, c.contaDac);
+  if (!idBeneficiario) throw new Error("Agência/conta/DAC do Itaú não configurados.");
+  const nn = params.nossoNumero.padStart(8, "0");
+
+  const token = await obterAccessToken(params.tenantId, c);
+  const qs = new URLSearchParams({
+    id_beneficiario: idBeneficiario,
+    codigo_carteira: ITAU_CARTEIRA,
+    nosso_numero:    nn,
+    view:            "specific",
+  });
+
+  const { status, data } = await requisicaoMtls(
+    `${ITAU_URLS.consulta}?${qs.toString()}`,
+    {
+      method: "GET",
       headers: {
         Authorization:          `Bearer ${token}`,
         "x-itau-apikey":        c.clientId,
@@ -489,6 +615,35 @@ export async function baixarBoleto(
     c.certificado,
     c.chavePrivada,
   );
+
+  const base: SituacaoBoleto = {
+    nossoNumero: nn, encontrado: false, situacao: null, vencimento: null,
+    valor: null, motivoBaixa: null, status, erro: null,
+  };
+  if (status >= 400) return { ...base, erro: extrairErro(data) };
+
+  // A resposta é { data: [ { id_boleto, dado_boleto: { dados_individuais_boleto: [...], baixa? } } ] }
+  type Individual = Record<string, string | undefined>;
+  type Item = { dado_boleto?: { dados_individuais_boleto?: Individual[]; baixa?: Record<string, string> } };
+  const d = data as { data?: Item[] | Item };
+  const lista: Item[] = Array.isArray(d?.data) ? d.data : d?.data ? [d.data] : [];
+  const item = lista.find((i) =>
+    i.dado_boleto?.dados_individuais_boleto?.some((b) => (b.numero_nosso_numero ?? "").padStart(8, "0") === nn),
+  ) ?? lista[0];
+  if (!item) return base;
+
+  const ind = item.dado_boleto?.dados_individuais_boleto?.find(
+    (b) => (b.numero_nosso_numero ?? "").padStart(8, "0") === nn,
+  ) ?? item.dado_boleto?.dados_individuais_boleto?.[0] ?? {};
+
+  return {
+    ...base,
+    encontrado:  true,
+    situacao:    ind.situacao_geral_boleto ?? null,
+    vencimento:  ind.data_vencimento ?? null,
+    valor:       ind.valor_titulo ?? null,
+    motivoBaixa: item.dado_boleto?.baixa?.motivo_baixa ?? null,
+  };
 }
 
 /** Extrai a mensagem de erro do formato de resposta do Itaú. */

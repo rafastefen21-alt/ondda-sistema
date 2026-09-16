@@ -586,10 +586,18 @@ export function OrderDetailClient({
           ...(cancelReason ? { cancelReason } : {}),
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json();
-        alert(err.error ?? "Erro ao atualizar pedido.");
+        alert(data.error ?? "Erro ao atualizar pedido.");
         return;
+      }
+      // Cancelamento: avisa se algum boleto não pôde ser baixado no Itaú
+      const falhas: string[] = data?.cobrancas?.falhas ?? [];
+      if (falhas.length > 0) {
+        alert(
+          `Pedido cancelado, mas o Itaú não aceitou a baixa do(s) boleto(s) ${falhas.join(", ")}. ` +
+          `Baixe pelo Bankline ou pela conciliação em Configurações → Integrações.`,
+        );
       }
       router.refresh();
     } catch {

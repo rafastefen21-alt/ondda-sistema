@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { OrderStatus } from "@/app/generated/prisma/client";
 import { sendOrderStatusEmail } from "@/lib/email";
 import { deductStockForOrder, restoreStockForOrder, STATUSES_WITH_STOCK_DEDUCTED } from "@/lib/stock";
-import { autoGerarCobranca } from "@/lib/cobranca-service";
+import { autoGerarCobranca, cancelarCobrancasPedido } from "@/lib/cobranca-service";
 import { mergeNotificacoes, renderNotifMessage, STATUS_TO_WA_KEY, STATUS_TO_MSG_KEY } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
 
@@ -285,6 +285,12 @@ export async function PATCH(
       console.error("[STOCK] erro ao restaurar estoque:", err);
     }
   }
+  // Cancelou o pedido → baixa o boleto no Itaú e cancela a cobrança pendente.
+  // Awaited pelo mesmo motivo da cobrança (serverless descarta tarefas soltas).
+  let cobrancasCanceladas: Awaited<ReturnType<typeof cancelarCobrancasPedido>> | null = null;
+  if (parsed.data.status === "CANCELADO") {
+    cobrancasCanceladas = await cancelarCobrancasPedido(id, session.user.tenantId);
+  }
 
   // ── Envia notificações se houve mudança de status ────────────────────────
   if (parsed.data.status) {
@@ -332,5 +338,7 @@ export async function PATCH(
     }
   }
 
-  return NextResponse.json(updated);
+  return NextResponse.json(
+    cobrancasCanceladas ? { ...updated, cobrancas: cobrancasCanceladas } : updated,
+  );
 }

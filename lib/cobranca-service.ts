@@ -15,7 +15,7 @@ import { MercadoPagoConfig, Preference } from "mercadopago";
 import { sendCobrancaEmail, sendBoletoEmail } from "@/lib/email";
 import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
-import { emitirBoleto, proximoNossoNumero, baixarBoleto } from "@/lib/itau";
+import { emitirBoleto, proximoNossoNumero, baixarBoleto, carregarCredenciaisItau } from "@/lib/itau";
 import { renderBoletoPdfById } from "@/lib/boleto-pdf";
 import { autoEmitirNfe, aguardarAutorizacaoNfe } from "@/lib/nfe-service";
 
@@ -220,10 +220,56 @@ export async function emitirBoletoPagamento(
   return boleto;
 }
 
+const agoraBr = () =>
+  new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+/** Acrescenta uma linha ao histórico (notes) do pagamento. */
+async function anotarPagamento(paymentId: string, linha: string): Promise<void> {
+  const cur = await prisma.payment.findUnique({ where: { id: paymentId }, select: { notes: true } });
+  const notes = [cur?.notes?.trim(), `[${agoraBr()}] ${linha}`].filter(Boolean).join("\n");
+  await prisma.payment.update({ where: { id: paymentId }, data: { notes } });
+}
+
 /**
- * Reemite o boleto: baixa o atual no Itaú (em produção) e gera um novo com a
- * data de vencimento informada. Usado para corrigir a data de um boleto já
- * emitido. Retorna os dados do novo boleto.
+ * Baixa no Itaú o boleto de um pagamento e registra o resultado no histórico.
+ * Em Validação (teste) não há nada registrado no banco — só anota.
+ * Lança se o Itaú recusar a baixa (o chamador decide se segue ou não).
+ */
+async function baixarBoletoDoPagamento(
+  payment: { id: string; itauNossoNumero: string },
+  tenantId: string,
+  motivo: string,
+): Promise<void> {
+  const cred = await carregarCredenciaisItau(tenantId);
+  if (!cred) throw new Error("Itaú não configurado. Preencha as credenciais em Configurações → Integrações.");
+
+  if (cred.ambiente !== "Efetivacao") {
+    await anotarPagamento(payment.id, `Boleto NN ${payment.itauNossoNumero} descartado (${motivo}; ambiente de validação, nada registrado no Itaú).`);
+    return;
+  }
+
+  const r = await baixarBoleto({ tenantId, credenciais: cred, nossoNumero: payment.itauNossoNumero });
+  if (!r.ok) {
+    console.error("[BAIXA-BOLETO] Itaú recusou", { paymentId: payment.id, nn: payment.itauNossoNumero, status: r.status, data: r.data });
+    await anotarPagamento(payment.id, `FALHA ao baixar boleto NN ${payment.itauNossoNumero} no Itaú (${motivo}): HTTP ${r.status} ${r.mensagem ?? ""}`.trim());
+    throw new Error(
+      `O Itaú não aceitou a baixa do boleto ${payment.itauNossoNumero} (HTTP ${r.status})` +
+      (r.mensagem ? `: ${r.mensagem}` : "") +
+      `. Nada foi alterado — baixe o boleto pelo Bankline/Itaú Empresas ou tente novamente.`,
+    );
+  }
+  console.log("[BAIXA-BOLETO] ok", { paymentId: payment.id, nn: payment.itauNossoNumero, motivo });
+  await anotarPagamento(payment.id, `Boleto NN ${payment.itauNossoNumero} baixado no Itaú (${motivo}).`);
+}
+
+/**
+ * Reemite o boleto: baixa o atual no Itaú e gera um novo com a data de
+ * vencimento informada. Usado para corrigir a data de um boleto já emitido.
+ *
+ * A baixa é OBRIGATÓRIA: se o Itaú recusar, a reemissão é abortada e o boleto
+ * atual permanece. Antes, a baixa era "best-effort" e dependia de um id que
+ * nunca era gravado na emissão — o boleto antigo ficava vivo no Itaú e o
+ * cliente recebia dois boletos do mesmo pedido.
  */
 export async function reemitirBoletoPagamento(
   paymentId: string,
@@ -232,37 +278,18 @@ export async function reemitirBoletoPagamento(
 ): Promise<{ nossoNumero: string; linhaDigitavel: string | null; codigoBarras: string | null }> {
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, tenantId },
-    select: { itauNossoNumero: true, itauIdBoleto: true, orderId: true, status: true },
+    select: { id: true, itauNossoNumero: true, itauIdBoleto: true, orderId: true, status: true },
   });
   if (!payment) throw new Error("Pagamento não encontrado.");
   if (payment.status === "PAGO") throw new Error("Este pagamento já está quitado.");
 
-  // Baixa o boleto atual no Itaú (best-effort; só faz sentido em produção).
   if (payment.itauNossoNumero) {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        itauClientId: true, itauClientSecret: true, itauCertificado: true,
-        itauChavePrivada: true, itauAgencia: true, itauConta: true,
-        itauContaDac: true, itauAmbiente: true,
-      },
-    });
-    const pronto = !!(
-      tenant?.itauClientId && tenant.itauClientSecret && tenant.itauCertificado &&
-      tenant.itauChavePrivada && tenant.itauAgencia && tenant.itauConta && tenant.itauContaDac
+    // Baixa o boleto atual no Itaú — lança (e aborta) se recusado.
+    await baixarBoletoDoPagamento(
+      { id: payment.id, itauNossoNumero: payment.itauNossoNumero },
+      tenantId,
+      `reemissão com vencimento ${opts.vencimento ?? "inalterado"}`,
     );
-    if (pronto && payment.itauIdBoleto && tenant!.itauAmbiente === "Efetivacao") {
-      try {
-        await baixarBoleto(payment.itauIdBoleto, tenantId, {
-          clientId: tenant!.itauClientId!, clientSecret: tenant!.itauClientSecret!,
-          certificado: tenant!.itauCertificado!, chavePrivada: tenant!.itauChavePrivada!,
-          agencia: tenant!.itauAgencia!, conta: tenant!.itauConta!,
-          contaDac: tenant!.itauContaDac!, ambiente: tenant!.itauAmbiente ?? "Validacao",
-        });
-      } catch (e) {
-        console.error("[REEMISSAO] falha ao baixar boleto anterior (segue a reemissão):", e);
-      }
-    }
 
     // Limpa os dados do boleto antigo para permitir a nova emissão.
     await prisma.payment.update({
@@ -284,6 +311,46 @@ export async function reemitirBoletoPagamento(
   return emitirBoletoPagamento(paymentId, tenantId, {
     notificar: true, vencimento: opts.vencimento, nfNumero: nf?.number ?? null,
   });
+}
+
+/**
+ * Cancela as cobranças pendentes de um pedido cancelado: baixa no Itaú os
+ * boletos ainda em aberto e marca os pagamentos como CANCELADO. Sem isso, o
+ * boleto do pedido cancelado continua registrado (e cobrável) no banco.
+ *
+ * Nunca lança — devolve o que conseguiu e o que falhou, para a rota reportar.
+ */
+export async function cancelarCobrancasPedido(
+  orderId: string,
+  tenantId: string,
+  motivo = "pedido cancelado",
+): Promise<{ cancelados: number; baixados: string[]; falhas: string[] }> {
+  const out = { cancelados: 0, baixados: [] as string[], falhas: [] as string[] };
+  try {
+    const pendentes = await prisma.payment.findMany({
+      where: { orderId, tenantId, status: { in: ["PENDENTE", "VENCIDO"] } },
+      select: { id: true, itauNossoNumero: true },
+    });
+
+    for (const p of pendentes) {
+      if (p.itauNossoNumero) {
+        try {
+          await baixarBoletoDoPagamento({ id: p.id, itauNossoNumero: p.itauNossoNumero }, tenantId, motivo);
+          out.baixados.push(p.itauNossoNumero);
+        } catch (e) {
+          console.error("[CANCELAR-COBRANCA] boleto não baixado:", p.itauNossoNumero, e);
+          out.falhas.push(p.itauNossoNumero);
+          // Mantém o pagamento PENDENTE com o boleto, para o operador resolver.
+          continue;
+        }
+      }
+      await prisma.payment.update({ where: { id: p.id }, data: { status: "CANCELADO" } });
+      out.cancelados++;
+    }
+  } catch (err) {
+    console.error("[CANCELAR-COBRANCA] erro inesperado:", err);
+  }
+  return out;
 }
 
 /**
