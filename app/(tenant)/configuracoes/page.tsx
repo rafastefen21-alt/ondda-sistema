@@ -186,6 +186,9 @@ export default async function ConfiguracoesPage() {
                 itauConta:        tenant.itauConta        ?? null,
                 itauContaDac:     tenant.itauContaDac     ?? null,
                 itauAmbiente:     tenant.itauAmbiente     ?? null,
+                itauMultaPct:     Number(tenant.itauMultaPct),
+                itauJurosMesPct:  Number(tenant.itauJurosMesPct),
+                itauDiasCarencia: tenant.itauDiasCarencia,
               }}
             />
           )}

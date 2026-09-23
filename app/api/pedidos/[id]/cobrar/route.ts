@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { sendCobrancaEmail } from "@/lib/email";
 import { emitirBoleto, proximoNossoNumero } from "@/lib/itau";
+import { textoEncargos } from "@/lib/cobranca-service";
 
 export async function POST(
   req: NextRequest,
@@ -113,6 +114,7 @@ export async function POST(
       itauClientId: true, itauClientSecret: true, itauCertificado: true,
       itauChavePrivada: true, itauAgencia: true, itauConta: true,
       itauContaDac: true, itauAmbiente: true,
+      itauMultaPct: true, itauJurosMesPct: true, itauDiasCarencia: true,
     },
   });
 
@@ -125,6 +127,11 @@ export async function POST(
 
   if (paymentMethod === "BOLETO" && itauPronto) {
     try {
+      const encargos = {
+        multaPct:     Number(tenant!.itauMultaPct),
+        jurosMesPct:  Number(tenant!.itauJurosMesPct),
+        diasCarencia: tenant!.itauDiasCarencia,
+      };
       const nossoNumero = await proximoNossoNumero(tenantId);
       const boleto = await emitirBoleto({
         tenantId,
@@ -157,6 +164,8 @@ export async function POST(
         vencimento:  dueDate,
         nossoNumero,
         seuNumero:   order.id.slice(-10).toUpperCase(),
+        mensagens:   textoEncargos(encargos),
+        encargos,
       });
 
       await prisma.payment.update({
@@ -166,6 +175,8 @@ export async function POST(
           itauIdBoleto:    boleto.idBoleto,
           linhaDigitavel:  boleto.linhaDigitavel,
           codigoBarras:    boleto.codigoBarras,
+          boletoMultaPct:    encargos.multaPct    as never,
+          boletoJurosMesPct: encargos.jurosMesPct as never,
         },
       });
 

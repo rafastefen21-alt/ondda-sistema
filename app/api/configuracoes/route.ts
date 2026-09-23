@@ -45,6 +45,10 @@ const schema = z.object({
   itauConta:        z.string().max(6).optional().nullable(),
   itauContaDac:     z.string().max(1).optional().nullable(),
   itauAmbiente:     z.enum(["Validacao", "Efetivacao"]).optional(),
+  // Encargos do boleto (tetos usuais de mercado: multa 2–4%, juros 1% a.m.)
+  itauMultaPct:     z.number().min(0).max(20).optional(),
+  itauJurosMesPct:  z.number().min(0).max(10).optional(),
+  itauDiasCarencia: z.number().int().min(1).max(30).optional(),
   // Notificações automáticas
   notificacoes:     z.record(z.string(), z.unknown()).optional().nullable(),
 });
@@ -108,6 +112,9 @@ export async function PATCH(req: NextRequest) {
       ...(d.itauConta        !== undefined ? { itauConta:        d.itauConta        || null } : {}),
       ...(d.itauContaDac     !== undefined ? { itauContaDac:     d.itauContaDac     || null } : {}),
       ...(d.itauAmbiente     !== undefined ? { itauAmbiente:     d.itauAmbiente } : {}),
+      ...(d.itauMultaPct     !== undefined ? { itauMultaPct:     d.itauMultaPct } : {}),
+      ...(d.itauJurosMesPct  !== undefined ? { itauJurosMesPct:  d.itauJurosMesPct } : {}),
+      ...(d.itauDiasCarencia !== undefined ? { itauDiasCarencia: d.itauDiasCarencia } : {}),
       ...(d.notificacoes !== undefined
         ? { notificacoes: d.notificacoes != null ? (d.notificacoes as Prisma.InputJsonValue) : Prisma.DbNull }
         : {}),

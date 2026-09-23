@@ -60,6 +60,9 @@ interface Props {
     itauConta:        string | null;
     itauContaDac:     string | null;
     itauAmbiente:     string | null;
+    itauMultaPct:     number;
+    itauJurosMesPct:  number;
+    itauDiasCarencia: number;
   };
 }
 
@@ -154,6 +157,9 @@ export function IntegracoesForm({ initial }: Props) {
   const [itauConta,        setItauConta]        = useState(initial.itauConta        ?? "");
   const [itauContaDac,     setItauContaDac]     = useState(initial.itauContaDac     ?? "");
   const [itauAmbiente,     setItauAmbiente]     = useState(initial.itauAmbiente     ?? "Validacao");
+  const [itauMultaPct,     setItauMultaPct]     = useState(String(initial.itauMultaPct ?? 4));
+  const [itauJurosMesPct,  setItauJurosMesPct]  = useState(String(initial.itauJurosMesPct ?? 1));
+  const [itauDiasCarencia, setItauDiasCarencia] = useState(String(initial.itauDiasCarencia ?? 1));
   const [showItauSecret,   setShowItauSecret]   = useState(false);
   const [loadingItau,      setLoadingItau]      = useState(false);
   const [successItau,      setSuccessItau]      = useState(false);
@@ -265,6 +271,9 @@ export function IntegracoesForm({ initial }: Props) {
         itauConta:        itauConta        || null,
         itauContaDac:     itauContaDac     || null,
         itauAmbiente,
+        itauMultaPct:     Number(String(itauMultaPct).replace(",", ".")) || 0,
+        itauJurosMesPct:  Number(String(itauJurosMesPct).replace(",", ".")) || 0,
+        itauDiasCarencia: Math.max(1, parseInt(itauDiasCarencia, 10) || 1),
       }),
     });
     setLoadingItau(false);
@@ -726,6 +735,47 @@ export function IntegracoesForm({ initial }: Props) {
               </select>
               <p className="text-xs text-gray-400">
                 Comece em Validação. Só mude para Efetivação após homologar com o Itaú.
+              </p>
+            </div>
+
+            {/* Encargos após o vencimento */}
+            <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+              <p className="text-sm font-medium text-gray-800">Juros e multa após o vencimento</p>
+              <p className="text-xs text-gray-500">
+                Registrados no boleto: o Itaú calcula e cobra o valor atualizado sozinho quando o
+                cliente paga em atraso. Vale para os boletos emitidos daqui em diante. Use 0 para isentar.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="itauMultaPct">Multa (% sobre o valor)</Label>
+                  <Input
+                    id="itauMultaPct"
+                    type="number" step="0.01" min="0" max="20" inputMode="decimal"
+                    value={itauMultaPct}
+                    onChange={(e) => setItauMultaPct(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="itauJurosMesPct">Juros (% ao mês)</Label>
+                  <Input
+                    id="itauJurosMesPct"
+                    type="number" step="0.01" min="0" max="10" inputMode="decimal"
+                    value={itauJurosMesPct}
+                    onChange={(e) => setItauJurosMesPct(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="itauDiasCarencia">Começa a contar (dias após o venc.)</Label>
+                  <Input
+                    id="itauDiasCarencia"
+                    type="number" step="1" min="1" max="30"
+                    value={itauDiasCarencia}
+                    onChange={(e) => setItauDiasCarencia(e.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">
+                Os juros são aplicados pro rata dia pelo banco (1% ao mês ≈ 0,033% ao dia).
               </p>
             </div>
 

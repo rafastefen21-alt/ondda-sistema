@@ -325,8 +325,29 @@ export async function emitirBoleto(params: {
   nossoNumero: string;
   seuNumero:   string;
   mensagens?:  string[];   // impressas no boleto (ex.: "Ref. NF-e nº 118")
+  /** Encargos após o vencimento. Omitido ou 0 = isento. */
+  encargos?: {
+    multaPct?:     number;  // % sobre o valor do título (uma vez)
+    jurosMesPct?:  number;  // % ao mês (o Itaú aplica pro rata dia)
+    diasCarencia?: number;  // dias após o vencimento para começar (mín. 1)
+  };
 }): Promise<ResultadoBoleto> {
   const { credenciais: c, pagador } = params;
+
+  // Percentuais no formato do Itaú: 5 casas decimais, sem ponto, 12 dígitos.
+  // Ex.: 1% → "000000100000"; 4% → "000000400000".
+  const pctItau = (p: number) => String(Math.round(p * 100000)).padStart(12, "0");
+  const multaPct    = Math.max(0, params.encargos?.multaPct    ?? 0);
+  const jurosMesPct = Math.max(0, params.encargos?.jurosMesPct ?? 0);
+  const diasCarencia = Math.max(1, Math.trunc(params.encargos?.diasCarencia ?? 1));
+  // codigo_tipo_multa: 01 valor fixo | 02 percentual | 03 isento
+  const multa = multaPct > 0
+    ? { codigo_tipo_multa: "02", percentual_multa: pctItau(multaPct), quantidade_dias_multa: diasCarencia }
+    : { codigo_tipo_multa: "03" };
+  // codigo_tipo_juros: 90 taxa mensal | 91 taxa diária | 93 valor por dia | 05 isento
+  const juros = jurosMesPct > 0
+    ? { codigo_tipo_juros: "90", percentual_juros: pctItau(jurosMesPct), quantidade_dias_juros: diasCarencia }
+    : { codigo_tipo_juros: "05" };
 
   const idBeneficiario = montarIdBeneficiario(c.agencia, c.conta, c.contaDac);
   if (!idBeneficiario) throw new Error("Agência/conta/DAC do Itaú não configurados.");
@@ -392,6 +413,8 @@ export async function emitirBoleto(params: {
           texto_seu_numero:    params.seuNumero.slice(0, 10),
         },
       ],
+      multa,
+      juros,
       ...(params.mensagens?.length
         ? { mensagens_cobranca: params.mensagens.slice(0, 4).map((m) => ({ mensagem: m.slice(0, 80) })) }
         : {}),

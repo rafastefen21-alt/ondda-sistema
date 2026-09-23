@@ -78,6 +78,18 @@ export function renderBoletoPdf(pagamento: PagamentoBoleto): Promise<Buffer> {
   ].filter(Boolean).join(" - ");
   const nf = pagamento.order.invoices.find((i) => i.status === "EMITIDA" && i.number);
 
+  // Encargos registrados neste boleto (o Itaú cobra automaticamente no atraso)
+  const pct = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  const multaPct = pagamento.boletoMultaPct    != null ? Number(pagamento.boletoMultaPct)    : 0;
+  const jurosPct = pagamento.boletoJurosMesPct != null ? Number(pagamento.boletoJurosMesPct) : 0;
+  const encargos = [
+    multaPct > 0 ? `multa de ${pct(multaPct)}%` : null,
+    jurosPct > 0 ? `juros de ${pct(jurosPct)}% ao mês` : null,
+  ].filter(Boolean).join(" + ");
+  const instrucoes = encargos
+    ? `Após o vencimento: ${encargos}. Não receber após 60 dias do vencimento.`
+    : "Sem juros ou multa após o vencimento.";
+
   const doc = React.createElement(
     Document, {},
     React.createElement(
@@ -108,9 +120,12 @@ export function renderBoletoPdf(pagamento: PagamentoBoleto): Promise<Buffer> {
           Cel({ label: "Endereço do Pagador", value: pagadorEndereco, flex: 3 }),
           Cel({ label: "Valor do Documento", value: brl(valor), flex: 1, bold: true, last: true }),
         ),
-        React.createElement(View, { style: [styles.row, { borderBottomWidth: 0 }] },
+        React.createElement(View, { style: styles.row },
           Cel({ label: "Nº do Pedido", value: `#${pagamento.orderId.slice(-6).toUpperCase()}`, flex: 1 }),
           Cel({ label: "Ref. NF-e", value: nf?.number ? `nº ${nf.number}` : "—", flex: 1, last: true }),
+        ),
+        React.createElement(View, { style: [styles.row, { borderBottomWidth: 0 }] },
+          Cel({ label: "Instruções (texto de responsabilidade do beneficiário)", value: instrucoes, flex: 1, last: true }),
         ),
       ),
       React.createElement(View, { style: styles.corte }),

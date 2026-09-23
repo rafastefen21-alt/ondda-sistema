@@ -21,6 +21,16 @@ import { autoEmitirNfe, aguardarAutorizacaoNfe } from "@/lib/nfe-service";
 
 const fmtBrl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+const fmtPct = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+/** Linhas impressas no boleto descrevendo multa e juros (vazio se isento). */
+export function textoEncargos(e: { multaPct: number; jurosMesPct: number }): string[] {
+  const partes: string[] = [];
+  if (e.multaPct > 0)    partes.push(`multa de ${fmtPct(e.multaPct)}%`);
+  if (e.jurosMesPct > 0) partes.push(`juros de ${fmtPct(e.jurosMesPct)}% ao mes`);
+  return partes.length ? [`Apos o vencimento: ${partes.join(" + ")}`] : [];
+}
+
 /**
  * Emite o boleto Itaú para um pagamento existente e (opcionalmente) notifica o
  * cliente por e-mail (PDF anexado) e WhatsApp. Lança em caso de erro.
@@ -95,6 +105,7 @@ export async function emitirBoletoPagamento(
       itauClientId: true, itauClientSecret: true, itauCertificado: true,
       itauChavePrivada: true, itauAgencia: true, itauConta: true,
       itauContaDac: true, itauAmbiente: true,
+      itauMultaPct: true, itauJurosMesPct: true, itauDiasCarencia: true,
     },
   });
   const itauPronto = !!(
@@ -107,6 +118,11 @@ export async function emitirBoletoPagamento(
 
   const client = payment.order.client;
   const total = Number(payment.amount);
+  const encargos = {
+    multaPct:     Number(tenant.itauMultaPct),
+    jurosMesPct:  Number(tenant.itauJurosMesPct),
+    diasCarencia: tenant.itauDiasCarencia,
+  };
 
   // Vencimento: usa o informado (edição na tela) ou o que já está no pagamento.
   let dueDate = payment.dueDate;
@@ -153,7 +169,11 @@ export async function emitirBoletoPagamento(
       vencimento:  dueDate,
       nossoNumero,
       seuNumero:   payment.orderId.slice(-10).toUpperCase(),
-      mensagens:   opts.nfNumero ? [`Ref. NF-e no ${opts.nfNumero}`] : undefined,
+      mensagens:   [
+        ...(opts.nfNumero ? [`Ref. NF-e no ${opts.nfNumero}`] : []),
+        ...textoEncargos(encargos),
+      ],
+      encargos,
     });
   } catch (err) {
     // Libera a trava para permitir nova tentativa (não emitiu de fato).
@@ -172,6 +192,8 @@ export async function emitirBoletoPagamento(
       linhaDigitavel:  boleto.linhaDigitavel,
       codigoBarras:    boleto.codigoBarras,
       boletoEmitindoEm: null,
+      boletoMultaPct:    encargos.multaPct    as never,
+      boletoJurosMesPct: encargos.jurosMesPct as never,
     },
   });
 

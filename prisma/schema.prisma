@@ -131,6 +131,11 @@ model Tenant {
   // Nosso Número da carteira 109 é responsabilidade do emissor:
   // deve ser crescente e nunca repetir.
   itauNossoNumeroSeq Int      @default(0)
+  // Encargos registrados no boleto (o Itaú calcula e cobra no pagamento em atraso).
+  // Multa: % sobre o valor, uma vez. Juros: % ao mês, pro rata dia. 0 = isento.
+  itauMultaPct       Decimal  @default(4) @db.Decimal(5, 2)
+  itauJurosMesPct    Decimal  @default(1) @db.Decimal(5, 2)
+  itauDiasCarencia   Int      @default(1) // dias após o vencimento para começar a cobrar
 
   // Configurações de notificações automáticas (JSON — ver lib/notificacoes.ts)
   notificacoes     Json?
@@ -406,6 +411,11 @@ model Payment {
   // Trava de emissão (idempotência): marca quando um boleto está sendo emitido,
   // para evitar boletos duplicados em chamadas concorrentes.
   boletoEmitindoEm        DateTime?
+  // Encargos que foram registrados neste boleto (cópia da config na emissão)
+  boletoMultaPct          Decimal?      @db.Decimal(5, 2)
+  boletoJurosMesPct       Decimal?      @db.Decimal(5, 2)
+  // Valor efetivamente recebido (informado pelo Itaú na baixa; inclui juros/multa)
+  paidAmount              Decimal?      @db.Decimal(10, 2)
   status       PaymentStatus @default(PENDENTE)
   notes        String?
   createdAt    DateTime      @default(now())

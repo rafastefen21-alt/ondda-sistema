@@ -67,11 +67,20 @@ export async function POST(req: NextRequest) {
       ? new Date(`${b.dataInclusaoPagamento}T12:00:00`)
       : new Date();
 
+    // Valor efetivamente recebido (com juros/multa). O Itaú manda em centavos
+    // sem separador ("000000000012345") ou com ponto decimal; trata os dois.
+    const bruto = (b.valorPagoTotalCobranca ?? "").trim();
+    const valorPago = !bruto ? null
+      : bruto.includes(".") || bruto.includes(",") ? Number(bruto.replace(",", "."))
+      : Number(bruto) / 100;
+
     await prisma.payment.update({
       where: { id: pagamento.id },
       data: {
         status: "PAGO",
         paidAt: isNaN(pagoEm.getTime()) ? new Date() : pagoEm,
+        ...(valorPago != null && isFinite(valorPago) && valorPago > 0
+          ? { paidAmount: valorPago as never } : {}),
         ...(b.idBoleto            ? { itauIdBoleto:   b.idBoleto } : {}),
         ...(b.numeroLinhaDigitavel ? { linhaDigitavel: b.numeroLinhaDigitavel } : {}),
         ...(b.codigoBarras         ? { codigoBarras:   b.codigoBarras } : {}),
