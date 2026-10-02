@@ -6,6 +6,8 @@ import {
   buildNfePayload,
   submitNfe,
   checkNfeStatus,
+  mapFocusStatus,
+  focusErrorMsg,
   type NfeOrder,
   type NfeTenant,
 } from "@/lib/nfe";
@@ -224,9 +226,7 @@ export async function POST(
       issuedAt:  focusData.data_emissao
         ? new Date(focusData.data_emissao)
         : null,
-      errorMsg:  focusData.erros
-        ? JSON.stringify(focusData.erros).slice(0, 500)
-        : null,
+      errorMsg:  focusErrorMsg(focusData),
     },
   });
 
@@ -308,11 +308,7 @@ export async function GET(
             issuedAt:  data.data_emissao
               ? new Date(data.data_emissao)
               : inv.issuedAt,
-            errorMsg: data.erros
-              ? JSON.stringify(data.erros).slice(0, 500)
-              : (mappedStatus === "ERRO" && !data.erros
-                  ? `Status Focus: ${data.status ?? "desconhecido"}`
-                  : inv.errorMsg),
+            errorMsg: focusErrorMsg(data) ?? inv.errorMsg,
           },
         });
       }),
@@ -385,16 +381,3 @@ export async function PATCH(
   return NextResponse.json({ invoice: updated });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function mapFocusStatus(status?: string) {
-  switch (status) {
-    case "autorizado":    return "EMITIDA"     as const;
-    case "cancelado":     return "CANCELADA"   as const;
-    case "erro":
-    case "rejeitado":     // SEFAZ rejeitou a NF-e (ex: erro 1002)
-    case "denegado":      // SEFAZ denegou (ex: emitente irregular)
-      return "ERRO" as const;
-    default:              return "PROCESSANDO" as const;
-  }
-}

@@ -346,6 +346,41 @@ export function buildNfePayload(order: NfeOrder, tenant: NfeTenant): Record<stri
   return payload;
 }
 
+// ─── Interpretação das respostas da Focus NF-e ────────────────────────────────
+
+/**
+ * Converte o status da Focus no status interno da Invoice.
+ *
+ * "erro_autorizacao" é o status que a Focus devolve quando a SEFAZ REJEITA a
+ * nota (ex.: 234 "IE do destinatário não vinculada ao CNPJ"). Sem tratá-lo, a
+ * nota ficava em PROCESSANDO para sempre, sem mostrar o motivo.
+ */
+export function mapFocusStatus(status?: string) {
+  switch (status) {
+    case "autorizado":       return "EMITIDA"   as const;
+    case "cancelado":        return "CANCELADA" as const;
+    case "erro_autorizacao": // SEFAZ rejeitou
+    case "erro":
+    case "rejeitado":
+    case "denegado":
+      return "ERRO" as const;
+    default:                 return "PROCESSANDO" as const;
+  }
+}
+
+/** Mensagem de erro legível a partir da resposta da Focus (rejeição SEFAZ ou erros de validação). */
+export function focusErrorMsg(data: {
+  status?: string; status_sefaz?: string; mensagem_sefaz?: string;
+  mensagem?: string; erros?: unknown;
+}): string | null {
+  if (data.erros) return JSON.stringify(data.erros).slice(0, 500);
+  if (mapFocusStatus(data.status) !== "ERRO") return null;
+  if (data.mensagem_sefaz) {
+    return `SEFAZ ${data.status_sefaz ?? ""}: ${data.mensagem_sefaz}`.replace("  ", " ").slice(0, 500);
+  }
+  return data.mensagem?.slice(0, 500) ?? `Status Focus: ${data.status ?? "desconhecido"}`;
+}
+
 // ─── Chamadas à API Focus NF-e ────────────────────────────────────────────────
 
 function focusAuth(token: string) {

@@ -15,7 +15,7 @@ import { MercadoPagoConfig, Preference } from "mercadopago";
 import { sendCobrancaEmail, sendBoletoEmail } from "@/lib/email";
 import { mergeNotificacoes, renderNotifMessage } from "@/lib/notificacoes";
 import { zapiSendText } from "@/lib/zapi";
-import { emitirBoleto, proximoNossoNumero, baixarBoleto, carregarCredenciaisItau } from "@/lib/itau";
+import { emitirBoleto, proximoNossoNumero, baixarBoleto, carregarCredenciaisItau, consultarBoleto } from "@/lib/itau";
 import { renderBoletoPdfById } from "@/lib/boleto-pdf";
 import { autoEmitirNfe, aguardarAutorizacaoNfe } from "@/lib/nfe-service";
 
@@ -271,6 +271,45 @@ async function baixarBoletoDoPagamento(
   }
 
   const r = await baixarBoleto({ tenantId, credenciais: cred, nossoNumero: payment.itauNossoNumero });
+
+  // 422 "título já baixado ou liquidado": o boleto não está mais em aberto no
+  // Itaú. Descobre qual dos dois casos é antes de decidir.
+  if (!r.ok && r.status === 422 && /baixado|liquidado/i.test(r.mensagem ?? "")) {
+    let sit: Awaited<ReturnType<typeof consultarBoleto>> | null = null;
+    try {
+      sit = await consultarBoleto({ tenantId, credenciais: cred, nossoNumero: payment.itauNossoNumero });
+    } catch (e) {
+      console.error("[BAIXA-BOLETO] consulta falhou", e);
+    }
+    const texto = `${sit?.situacao ?? ""} ${sit?.motivoBaixa ?? ""}`.toUpperCase();
+    const pago = /PAG|LIQUID/.test(texto);
+    const baixado = !pago && /BAIX/.test(texto);
+    console.log("[BAIXA-BOLETO] já baixado/liquidado", { nn: payment.itauNossoNumero, situacao: sit?.situacao, motivo: sit?.motivoBaixa, erro: sit?.erro });
+
+    if (pago) {
+      // O cliente já pagou — registra o pagamento e não reemite/cancela nada.
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "PAGO", paidAt: new Date() },
+      });
+      await anotarPagamento(payment.id, `Boleto NN ${payment.itauNossoNumero} consta como PAGO no Itaú (${sit?.situacao ?? ""}) — pagamento marcado como pago (${motivo}).`);
+      throw new Error(
+        `O boleto ${payment.itauNossoNumero} já foi PAGO no Itaú. O pagamento foi marcado como pago no sistema e nenhum boleto novo foi gerado.`,
+      );
+    }
+    if (baixado) {
+      // Já estava baixado no banco (ex.: baixa manual pelo Bankline) — não há
+      // boleto vivo, então é seguro seguir.
+      await anotarPagamento(payment.id, `Boleto NN ${payment.itauNossoNumero} já estava baixado no Itaú (${sit?.motivoBaixa ?? sit?.situacao ?? ""}) — ${motivo}.`);
+      return;
+    }
+    await anotarPagamento(payment.id, `Boleto NN ${payment.itauNossoNumero}: Itaú informa "já baixado ou liquidado", mas a consulta não confirmou qual (${sit?.erro ?? sit?.situacao ?? "sem resposta"}).`);
+    throw new Error(
+      `O Itaú informa que o boleto ${payment.itauNossoNumero} já foi baixado ou pago, mas não consegui confirmar qual dos dois. ` +
+      `Confira no Itaú Empresas: se foi PAGO, use "Marcar pago"; se foi BAIXADO, tente novamente ou fale com o suporte.`,
+    );
+  }
+
   if (!r.ok) {
     console.error("[BAIXA-BOLETO] Itaú recusou", { paymentId: payment.id, nn: payment.itauNossoNumero, status: r.status, data: r.data });
     await anotarPagamento(payment.id, `FALHA ao baixar boleto NN ${payment.itauNossoNumero} no Itaú (${motivo}): HTTP ${r.status} ${r.mensagem ?? ""}`.trim());

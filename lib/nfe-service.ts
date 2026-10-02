@@ -5,7 +5,10 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { validateNfeReady, buildNfePayload, submitNfe, checkNfeStatus } from "@/lib/nfe";
+import {
+  validateNfeReady, buildNfePayload, submitNfe, checkNfeStatus,
+  mapFocusStatus, focusErrorMsg,
+} from "@/lib/nfe";
 import { sendNfeEmail } from "@/lib/email";
 import { mergeNotificacoes } from "@/lib/notificacoes";
 
@@ -41,11 +44,7 @@ export async function aguardarAutorizacaoNfe(
     const { data } = await checkNfeStatus(
       invoice.focusNfeRef, tenant.focusNfeToken, tenant.nfeAmbiente ?? "homologacao",
     );
-    const status =
-      data.status === "autorizado" ? "EMITIDA" as const
-      : data.status === "cancelado" ? "CANCELADA" as const
-      : (data.status === "erro" || data.status === "rejeitado" || data.status === "denegado") ? "ERRO" as const
-      : "PROCESSANDO" as const;
+    const status = mapFocusStatus(data.status);
 
     await prisma.invoice.update({
       where: { id: invoiceId },
@@ -56,7 +55,7 @@ export async function aguardarAutorizacaoNfe(
         xmlUrl:    data.caminho_xml_nota_fiscal ?? data.caminho_xml ?? invoice.xmlUrl,
         pdfUrl:    data.caminho_danfe ?? invoice.pdfUrl,
         issuedAt:  data.data_emissao ? new Date(data.data_emissao) : invoice.issuedAt,
-        errorMsg:  data.erros ? JSON.stringify(data.erros).slice(0, 500) : invoice.errorMsg,
+        errorMsg:  focusErrorMsg(data) ?? invoice.errorMsg,
       },
     });
 
@@ -165,12 +164,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
       ref, payload, tenant.focusNfeToken, ambiente,
     );
 
-    const mapStatus = (s?: string) => {
-      if (s === "autorizado") return "EMITIDA" as const;
-      if (s === "cancelado") return "CANCELADA" as const;
-      if (s === "erro" || s === "rejeitado" || s === "denegado") return "ERRO" as const;
-      return "PROCESSANDO" as const;
-    };
+    const mapStatus = mapFocusStatus;
 
     if (httpStatus >= 400) {
       await prisma.invoice.update({
@@ -190,7 +184,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
         xmlUrl:    focusData.caminho_xml_nota_fiscal ?? focusData.caminho_xml ?? null,
         pdfUrl:    focusData.caminho_danfe ?? null,
         issuedAt:  focusData.data_emissao ? new Date(focusData.data_emissao) : null,
-        errorMsg:  focusData.erros ? JSON.stringify(focusData.erros).slice(0, 500) : null,
+        errorMsg:  focusErrorMsg(focusData),
       },
     });
 
