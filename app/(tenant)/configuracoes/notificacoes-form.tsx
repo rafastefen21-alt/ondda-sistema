@@ -159,6 +159,41 @@ export function NotificacoesForm({ initial, zapiConfigured }: Props) {
     }
   }
 
+  // Situação do modelo na Meta
+  const [tplLoading, setTplLoading] = useState<"ver" | "cadastrar" | null>(null);
+  const [tplInfo, setTplInfo] = useState<{ existe: boolean; status: string | null; motivoRecusa: string | null } | null>(null);
+  const [tplErro, setTplErro] = useState("");
+
+  async function verificarModelo() {
+    setTplLoading("ver"); setTplErro("");
+    try {
+      const res = await fetch("/api/configuracoes/wa-template");
+      const data = await res.json();
+      if (!res.ok) { setTplErro(data.error ?? "Falha ao consultar o modelo."); return; }
+      setTplInfo(data);
+    } catch { setTplErro("Erro de conexão."); }
+    finally { setTplLoading(null); }
+  }
+
+  async function cadastrarModelo() {
+    setTplLoading("cadastrar"); setTplErro("");
+    try {
+      const res = await fetch("/api/configuracoes/wa-template", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setTplErro(data.error ?? "Falha ao cadastrar o modelo."); return; }
+      setTplInfo({ existe: true, status: data.status ?? "PENDING", motivoRecusa: null });
+    } catch { setTplErro("Erro de conexão."); }
+    finally { setTplLoading(null); }
+  }
+
+  const statusLabel: Record<string, string> = {
+    APPROVED: "Aprovado ✔ — pode ativar os lembretes",
+    PENDING:  "Em análise pela Meta (aguarde a aprovação)",
+    REJECTED: "Recusado pela Meta",
+    PAUSED:   "Pausado pela Meta (qualidade baixa)",
+    DISABLED: "Desativado pela Meta",
+  };
+
   async function copiarCorpo() {
     try {
       await navigator.clipboard.writeText(LEMBRETE_TEMPLATE_CORPO);
@@ -376,11 +411,40 @@ export function NotificacoesForm({ initial, zapiConfigured }: Props) {
               <p className="font-medium">Por que precisa de um modelo aprovado?</p>
               <p className="mt-1">
                 O WhatsApp só entrega mensagens iniciadas pela empresa fora da janela de 24h se forem um
-                <strong> modelo aprovado pela Meta</strong>. Cadastre o modelo abaixo no painel da Datafy
-                (ou no Gerenciador do WhatsApp da Meta) com o nome <code className="rounded bg-amber-100 px-1">{LEMBRETE_TEMPLATE_NOME}</code>,
-                categoria <strong>Utilidade</strong>, idioma <strong>Português (BR)</strong>, e com 6 variáveis no corpo.
-                Depois de aprovado, ative o envio acima.
+                <strong> modelo aprovado pela Meta</strong>. O sistema cadastra o modelo abaixo pela API
+                (nome <code className="rounded bg-amber-100 px-1">{LEMBRETE_TEMPLATE_NOME}</code>, categoria
+                <strong> Utilidade</strong>, idioma <strong>Português (BR)</strong>). Depois de aprovado, ative o envio acima.
               </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!!tplLoading || !zapiConfigured}
+                  onClick={verificarModelo}
+                  className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {tplLoading === "ver" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Verificar aprovação na Meta
+                </button>
+                {tplInfo && !tplInfo.existe && (
+                  <button
+                    type="button"
+                    disabled={!!tplLoading}
+                    onClick={cadastrarModelo}
+                    className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    {tplLoading === "cadastrar" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Cadastrar modelo pela API
+                  </button>
+                )}
+                {tplInfo && (
+                  <span className={`text-xs font-medium ${tplInfo.status === "APPROVED" ? "text-green-700" : tplInfo.status === "REJECTED" ? "text-red-700" : "text-amber-800"}`}>
+                    {tplInfo.existe
+                      ? (statusLabel[tplInfo.status ?? ""] ?? tplInfo.status) + (tplInfo.motivoRecusa ? ` — ${tplInfo.motivoRecusa}` : "")
+                      : "Modelo ainda não cadastrado na Meta"}
+                  </span>
+                )}
+              </div>
+              {tplErro && <p className="mt-1 text-xs text-red-600">{tplErro}</p>}
               <pre className="mt-2 whitespace-pre-wrap rounded-md border border-amber-200 bg-white p-2 font-sans text-xs text-gray-800">{LEMBRETE_TEMPLATE_CORPO}</pre>
               <p className="mt-1 text-amber-700">
                 Variáveis: {"{{1}}"} nome do cliente · {"{{2}}"} distribuidora · {"{{3}}"} nº do pedido ·
