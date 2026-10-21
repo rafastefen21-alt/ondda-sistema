@@ -4,8 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bell, Mail, MessageCircle, CheckCircle } from "lucide-react";
-import { DEFAULT_NOTIFICACOES, mergeNotificacoes, type TenantNotificacoes } from "@/lib/notificacoes";
+import { Bell, Mail, MessageCircle, CheckCircle, CalendarClock, Copy, Loader2 } from "lucide-react";
+import {
+  DEFAULT_NOTIFICACOES, mergeNotificacoes, LEMBRETE_TEMPLATE_CORPO, LEMBRETE_TEMPLATE_NOME,
+  type TenantNotificacoes,
+} from "@/lib/notificacoes";
+
+interface LembreteResultado {
+  cliente: string; telefone: string | null; diasAntes: number; vencimento: string;
+  valor: number; enviado: boolean; modo: string; erro?: string;
+}
 
 // ─── Toggle switch ─────────────────────────────────────────────────────────────
 
@@ -111,6 +119,52 @@ export function NotificacoesForm({ initial, zapiConfigured }: Props) {
 
   function setMsg<K extends keyof TenantNotificacoes["mensagens"]>(k: K, v: string) {
     setCfg((prev) => ({ ...prev, mensagens: { ...prev.mensagens, [k]: v } }));
+  }
+
+  function setLembrete<K extends keyof TenantNotificacoes["lembretes"]>(k: K, v: TenantNotificacoes["lembretes"][K]) {
+    setCfg((prev) => ({ ...prev, lembretes: { ...prev.lembretes, [k]: v } }));
+  }
+
+  // Lembretes de vencimento — teste manual
+  const [diasTexto, setDiasTexto] = useState(() => mergeNotificacoes(initial).lembretes.diasAntes.join(", "));
+  const [lembLoading, setLembLoading] = useState<"simular" | "enviar" | null>(null);
+  const [lembErro, setLembErro] = useState("");
+  const [lembResultado, setLembResultado] = useState<{ hoje: string; resultados: LembreteResultado[] } | null>(null);
+  const [copiado, setCopiado] = useState(false);
+
+  function aplicarDias(texto: string) {
+    setDiasTexto(texto);
+    const dias = texto.split(/[\s,;]+/).map((s) => parseInt(s, 10)).filter((n) => Number.isFinite(n) && n >= 0);
+    setLembrete("diasAntes", dias);
+  }
+
+  async function rodarLembretes(simular: boolean) {
+    if (!simular && !confirm("Enviar agora os lembretes de hoje por WhatsApp aos clientes? (Salve a configuração antes.)")) return;
+    setLembLoading(simular ? "simular" : "enviar");
+    setLembErro("");
+    setLembResultado(null);
+    try {
+      const res = await fetch("/api/cron/lembretes-boleto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ simular }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLembErro(data.error ?? "Falha ao processar lembretes."); return; }
+      setLembResultado(data);
+    } catch {
+      setLembErro("Erro de conexão.");
+    } finally {
+      setLembLoading(null);
+    }
+  }
+
+  async function copiarCorpo() {
+    try {
+      await navigator.clipboard.writeText(LEMBRETE_TEMPLATE_CORPO);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch { /* ignora */ }
   }
 
   async function handleSave() {
@@ -272,6 +326,117 @@ export function NotificacoesForm({ initial, zapiConfigured }: Props) {
               onChange={(v) => setMsg("pagamentoConfirmado", v)}
               placeholder={DEFAULT_NOTIFICACOES.mensagens.pagamentoConfirmado}
             />
+          </div>
+        </div>
+
+        {/* ── Lembretes de vencimento de boleto ──────────────────────────────── */}
+        <div>
+          <div className="mb-3 flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-amber-500" />
+            <h3 className="text-sm font-semibold text-gray-800">Lembrete de vencimento do boleto (WhatsApp)</h3>
+          </div>
+          <div className="space-y-3 rounded-xl border border-gray-100 p-3">
+            <Toggle
+              checked={cfg.lembretes.ativo}
+              onChange={(v) => setLembrete("ativo", v)}
+              label="Enviar lembretes automáticos"
+              description="Todo dia às 9h o sistema avisa, por WhatsApp, os clientes cujos boletos vencem nos dias configurados abaixo. Cada lembrete é enviado uma única vez por boleto."
+            />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="space-y-1 text-xs text-gray-600">
+                Dias antes do vencimento
+                <input
+                  value={diasTexto}
+                  onChange={(e) => aplicarDias(e.target.value)}
+                  placeholder="7, 2"
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-gray-600">
+                Nome do modelo aprovado (Meta)
+                <input
+                  value={cfg.lembretes.templateNome}
+                  onChange={(e) => setLembrete("templateNome", e.target.value.trim())}
+                  placeholder={LEMBRETE_TEMPLATE_NOME}
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-gray-600">
+                Idioma do modelo
+                <input
+                  value={cfg.lembretes.templateIdioma}
+                  onChange={(e) => setLembrete("templateIdioma", e.target.value.trim())}
+                  placeholder="pt_BR"
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </label>
+            </div>
+
+            <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+              <p className="font-medium">Por que precisa de um modelo aprovado?</p>
+              <p className="mt-1">
+                O WhatsApp só entrega mensagens iniciadas pela empresa fora da janela de 24h se forem um
+                <strong> modelo aprovado pela Meta</strong>. Cadastre o modelo abaixo no painel da Datafy
+                (ou no Gerenciador do WhatsApp da Meta) com o nome <code className="rounded bg-amber-100 px-1">{LEMBRETE_TEMPLATE_NOME}</code>,
+                categoria <strong>Utilidade</strong>, idioma <strong>Português (BR)</strong>, e com 6 variáveis no corpo.
+                Depois de aprovado, ative o envio acima.
+              </p>
+              <pre className="mt-2 whitespace-pre-wrap rounded-md border border-amber-200 bg-white p-2 font-sans text-xs text-gray-800">{LEMBRETE_TEMPLATE_CORPO}</pre>
+              <p className="mt-1 text-amber-700">
+                Variáveis: {"{{1}}"} nome do cliente · {"{{2}}"} distribuidora · {"{{3}}"} nº do pedido ·
+                {" {{4}}"} valor · {"{{5}}"} vencimento · {"{{6}}"} linha digitável.
+                Exemplos para a aprovação: Padaria São José · Casa do Pão SP · A1B2C3D4 · R$ 528,00 · 28/10/2026 · 34191.09008 00000.123456 78901.234567 8 12340000052800
+              </p>
+              <button
+                type="button"
+                onClick={copiarCorpo}
+                className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+              >
+                <Copy className="h-3 w-3" />
+                {copiado ? "Copiado!" : "Copiar texto do modelo"}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" variant="outline" disabled={!!lembLoading} onClick={() => rodarLembretes(true)}>
+                {lembLoading === "simular" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Conferindo...</> : "Ver quem receberia hoje"}
+              </Button>
+              <Button type="button" variant="outline" disabled={!!lembLoading || !zapiConfigured} onClick={() => rodarLembretes(false)}>
+                {lembLoading === "enviar" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enviando...</> : "Enviar lembretes de hoje agora"}
+              </Button>
+            </div>
+            {lembErro && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{lembErro}</p>}
+            {lembResultado && (
+              <div className="overflow-x-auto rounded-md border border-gray-200">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-left text-gray-600">
+                    <tr>
+                      <th className="px-2 py-1.5 font-medium">Cliente</th>
+                      <th className="px-2 py-1.5 font-medium">Telefone</th>
+                      <th className="px-2 py-1.5 font-medium">Vence</th>
+                      <th className="px-2 py-1.5 font-medium">Valor</th>
+                      <th className="px-2 py-1.5 font-medium">Resultado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lembResultado.resultados.length === 0 && (
+                      <tr><td colSpan={5} className="px-2 py-2 text-gray-500">Nenhum boleto vence nos dias configurados (referência: {lembResultado.hoje}).</td></tr>
+                    )}
+                    {lembResultado.resultados.map((r, i) => (
+                      <tr key={i} className="border-t border-gray-100">
+                        <td className="px-2 py-1.5">{r.cliente}</td>
+                        <td className="px-2 py-1.5 font-mono">{r.telefone ?? "—"}</td>
+                        <td className="px-2 py-1.5">{r.vencimento.split("-").reverse().join("/")} ({r.diasAntes}d)</td>
+                        <td className="px-2 py-1.5">R$ {r.valor.toFixed(2)}</td>
+                        <td className={`px-2 py-1.5 ${r.enviado ? "text-green-700" : r.modo === "simulacao" ? "text-gray-700" : "text-amber-700"}`}>
+                          {r.enviado ? `Enviado (${r.modo})` : r.modo === "simulacao" ? "Receberia" : r.erro ?? "Não enviado"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 

@@ -125,6 +125,69 @@ export async function zapiSendText(
   }
 }
 
+/**
+ * Envia uma mensagem de MODELO (template aprovado pela Meta).
+ *
+ * Fora da janela de 24h desde a última mensagem do cliente, a Meta só entrega
+ * mensagens de modelo — texto livre é recusado. Por isso lembretes agendados
+ * (vencimento de boleto etc.) precisam de um modelo aprovado.
+ *
+ * bodyParams: valores de {{1}}, {{2}}... do corpo, na ordem. Sem quebras de linha.
+ */
+export async function zapiSendTemplate(
+  cfg: ZApiConfig,
+  phone: string,
+  template: { name: string; language?: string; bodyParams: string[] },
+): Promise<SendTextResult> {
+  const formatted = formatPhone(phone);
+
+  if (!isValidPhone(formatted)) {
+    return { phone, success: false, error: "Número de telefone inválido" };
+  }
+  if (!cfg.instanceId || !cfg.token) {
+    return { phone, success: false, error: "WhatsApp (Datafy) não configurado" };
+  }
+  if (!template.name) {
+    return { phone, success: false, error: "Nome do modelo não informado" };
+  }
+
+  try {
+    const res = await fetch(`${DATAFY_BASE}/${encodeURIComponent(cfg.instanceId)}/messages`, {
+      method: "POST",
+      headers: authHeaders(cfg),
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: formatted,
+        type: "template",
+        template: {
+          name: template.name,
+          language: { code: template.language || "pt_BR" },
+          components: template.bodyParams.length
+            ? [{
+                type: "body",
+                parameters: template.bodyParams.map((t) => ({
+                  type: "text",
+                  // A Meta rejeita parâmetros com quebra de linha ou 4+ espaços seguidos
+                  text: t.replace(/\s*\n\s*/g, " ").replace(/ {4,}/g, "   ").trim(),
+                })),
+              }]
+            : [],
+        },
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data?.error?.message ?? data?.message ?? `HTTP ${res.status}`;
+      return { phone, success: false, error: msg };
+    }
+    return { phone, success: true, zapiMessageId: data?.messages?.[0]?.id ?? undefined };
+  } catch (err: unknown) {
+    return { phone, success: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 /** Substitui variáveis na mensagem: {nome}, {nomeFantasia}. */
 export function renderMessage(
   template: string,

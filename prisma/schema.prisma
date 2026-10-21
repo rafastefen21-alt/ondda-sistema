@@ -416,6 +416,8 @@ model Payment {
   boletoJurosMesPct       Decimal?      @db.Decimal(5, 2)
   // Valor efetivamente recebido (informado pelo Itaú na baixa; inclui juros/multa)
   paidAmount              Decimal?      @db.Decimal(10, 2)
+  // Lembretes de vencimento já enviados por WhatsApp: { "7": "2026-10-21T12:00:00Z", "2": ... }
+  lembretesEnviados       Json?
   status       PaymentStatus @default(PENDENTE)
   notes        String?
   createdAt    DateTime      @default(now())
