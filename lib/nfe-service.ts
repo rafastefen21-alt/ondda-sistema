@@ -169,7 +169,7 @@ export async function autoEmitirNfe(orderId: string, tenantId: string): Promise<
     if (httpStatus >= 400) {
       await prisma.invoice.update({
         where: { id: invoice.id },
-        data: { status: "ERRO", errorMsg: JSON.stringify(focusData).slice(0, 500) },
+        data: { status: "ERRO", errorMsg: focusErrorMsg(focusData) ?? JSON.stringify(focusData).slice(0, 500) },
       });
       console.error("[NFE-AUTO] erro Focus NF-e HTTP", httpStatus, focusData);
       return null;

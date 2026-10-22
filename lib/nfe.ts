@@ -371,8 +371,11 @@ export function mapFocusStatus(status?: string) {
 /** Mensagem de erro legível a partir da resposta da Focus (rejeição SEFAZ ou erros de validação). */
 export function focusErrorMsg(data: {
   status?: string; status_sefaz?: string; mensagem_sefaz?: string;
-  mensagem?: string; erros?: unknown;
+  mensagem?: string; erros?: unknown; codigo?: string;
 }): string | null {
+  if (data.codigo === "permissao_negada") {
+    return "Token da Focus NFe inválido ou revogado. Copie o token atual no painel da Focus NFe e atualize em Configurações → Integrações → Focus NF-e.";
+  }
   if (data.erros) return JSON.stringify(data.erros).slice(0, 500);
   if (mapFocusStatus(data.status) !== "ERRO") return null;
   if (data.mensagem_sefaz) {

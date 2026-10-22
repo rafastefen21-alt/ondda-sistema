@@ -194,7 +194,7 @@ export async function POST(
       where: { id: invoice.id },
       data: {
         status:   "ERRO",
-        errorMsg: JSON.stringify(focusData).slice(0, 500),
+        errorMsg: focusErrorMsg(focusData) ?? JSON.stringify(focusData).slice(0, 500),
       },
     });
     return NextResponse.json(
