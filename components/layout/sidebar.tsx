@@ -23,6 +23,7 @@ import {
   Warehouse,
   MessageCircle,
   UserSearch,
+  BarChart3,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,12 @@ const navItems: NavItem[] = [
     href: "/financeiro",
     label: "Financeiro",
     icon: DollarSign,
+    roles: ["TENANT_ADMIN", "GERENTE"],
+  },
+  {
+    href: "/relatorios",
+    label: "Relatórios",
+    icon: BarChart3,
     roles: ["TENANT_ADMIN", "GERENTE"],
   },
   {
